@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiGet, apiUrl, getOverview } from './api';
+import { apiGet, apiUrl, getCreditSpreads, getCreditSummary, getOverview } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -21,6 +21,17 @@ describe('frontend API client', () => {
   it('returns typed JSON payloads on success', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ ok: true })));
     await expect(apiGet<{ ok: boolean }>('/api/health')).resolves.toEqual({ ok: true });
+  });
+
+  it('validates credit-spread and summary response shapes', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(Response.json({ series: [], sourceStatus: { status: 'pending' }, source: 'https://boi.org.il', dataflow: 'BOI.STATISTICS:SECDWH:1.0' }))
+      .mockResolvedValueOnce(Response.json({ seriesCount: 0, coverage: {}, sourceStatus: {}, changes: { bullets: [] } })));
+    await expect(getCreditSpreads()).resolves.toMatchObject({ series: [], dataflow: 'BOI.STATISTICS:SECDWH:1.0' });
+    await expect(getCreditSummary()).resolves.toMatchObject({ seriesCount: 0, changes: { bullets: [] } });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ series: null })));
+    await expect(getCreditSpreads()).rejects.toMatchObject({ kind: 'schema' });
   });
 
   it('rejects an overview response with a missing/null schema instead of rendering it as data', async () => {

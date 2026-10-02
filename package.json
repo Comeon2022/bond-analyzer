@@ -10,8 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "worker:dev": "wrangler dev --local",
-    "db:migrate:local": "wrangler d1 migrations apply macro-rates-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply macro-rates-db --remote",
+    "db:migrate:local": "wrangler d1 migrations apply bond-analyzer-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply bond-analyzer-db --remote",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

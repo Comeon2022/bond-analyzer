@@ -1,4 +1,5 @@
 import type { OverviewResponse } from '../../shared/types';
+import type { CreditSpreadsResponse, CreditSummaryResponse } from './api-types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
 
@@ -76,4 +77,22 @@ export async function getApiHealth(): Promise<ApiHealth> {
     throw new ApiError('בדיקת תקינות שרת הנתונים נכשלה.', null, 'schema');
   }
   return payload as unknown as ApiHealth;
+}
+
+export async function getCreditSpreads(): Promise<CreditSpreadsResponse> {
+  const payload = await apiGet<unknown>('/api/credit/spreads');
+  if (!isRecord(payload) || !Array.isArray(payload.series) || !isRecord(payload.sourceStatus)
+    || typeof payload.source !== 'string' || typeof payload.dataflow !== 'string') {
+    throw new ApiError('תגובת נתוני מרווחי האשראי מבנק ישראל אינה תקינה.', null, 'schema');
+  }
+  return payload as unknown as CreditSpreadsResponse;
+}
+
+export async function getCreditSummary(): Promise<CreditSummaryResponse> {
+  const payload = await apiGet<unknown>('/api/credit/summary');
+  if (!isRecord(payload) || typeof payload.seriesCount !== 'number' || !isRecord(payload.coverage)
+    || !isRecord(payload.sourceStatus) || !isRecord(payload.changes) || !Array.isArray(payload.changes.bullets)) {
+    throw new ApiError('תגובת סיכום מרווחי האשראי אינה תקינה.', null, 'schema');
+  }
+  return payload as unknown as CreditSummaryResponse;
 }

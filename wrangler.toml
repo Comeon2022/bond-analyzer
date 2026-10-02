@@ -14,8 +14,8 @@ crons = ["30 16 * * 1-5"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "macro-rates-db"
-database_id = "00000000-0000-0000-0000-000000000001"
+database_name = "bond-analyzer-db"
+database_id = "ec858043-977d-4d5c-96a5-e5cd50e852e3"
 migrations_dir = "migrations"
 
 [assets]

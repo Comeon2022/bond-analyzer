@@ -166,3 +166,38 @@ h1, h2, h3, p { margin-top: 0; }
 .bond-table tbody tr { cursor:pointer; }.bond-table tbody tr:hover { background:#f7fafb; }
 .bond-screener .two-column { align-items:stretch; }.bond-screener .two-column .panel { min-width:0; }
 @media(max-width:700px){.bond-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.bond-table{font-size:9px}.bond-table th,.bond-table td{padding:7px 5px}.bond-screener .two-column{grid-template-columns:1fr}}
+.free-source-badge { display: inline-flex; align-items: center; white-space: nowrap; border-radius: 999px; padding: 6px 10px; background: #e3f3ed; color: #216957; font-size: 12px; font-weight: 700; }
+.credit-source-status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: #f1f4f2; color: #46645d; font-size: 12px; }
+.credit-source-status a, .credit-provenance a { color: #276d69; text-decoration: underline; }
+.credit-healthy > span:first-child { color: #247257; font-weight: 700; }
+.credit-stale, .credit-error { background: #fff1e7; color: #885132; }
+.credit-pending { background: #f5f1e8; color: #786945; }
+.credit-summary-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin: 14px 0; }
+.credit-summary-grid > div { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 13px; border: 1px solid #e9e5dd; border-radius: 12px; background: #fff; }
+.credit-summary-grid small { color: #7a7d79; font-size: 11px; }
+.credit-summary-grid b { overflow-wrap: anywhere; color: #283c39; font-size: 13px; }
+.credit-series-table-wrap { overflow-x: auto; border: 1px solid #e9e5dd; border-radius: 12px; }
+.credit-series-table { width: 100%; min-width: 970px; border-collapse: collapse; text-align: right; font-size: 12px; }
+.credit-series-table th { padding: 11px 10px; background: #f5f6f3; color: #69716d; font-weight: 650; white-space: nowrap; }
+.credit-series-table td { padding: 11px 10px; border-top: 1px solid #efede7; color: #35413d; white-space: nowrap; }
+.credit-series-table tr { cursor: pointer; }
+.credit-series-table tbody tr:hover, .credit-series-table tbody tr.selected { background: #eff7f4; }
+.credit-series-table td:first-child { min-width: 210px; white-space: normal; }
+.credit-series-table td:first-child small { display: block; margin-top: 4px; color: #818580; }
+.credit-message { display: flex; flex-direction: column; gap: 6px; padding: 15px; border-radius: 10px; background: #f7f5ef; color: #74623e; }
+.metadata-warning { margin: 10px 0; color: #895c30; font-size: 12px; }
+.credit-chart-block { margin-top: 20px; padding-top: 17px; border-top: 1px solid #ece9e3; }
+.credit-chart-block .panel-title { align-items: end; }
+.credit-chart-block h3 { margin: 5px 0 0; font-size: 17px; }
+.credit-chart-controls { display: flex; align-items: end; gap: 10px; }
+.credit-chart-controls label { display: grid; gap: 4px; color: #767b76; font-size: 11px; }
+.credit-chart-controls select { max-width: 230px; padding: 7px; border: 1px solid #dfded8; border-radius: 7px; background: white; color: #33413d; }
+.credit-chart-controls [role="group"] { display: flex; }
+.credit-chart-controls button { padding: 7px 9px; border: 1px solid #deded8; background: #fff; color: #68716c; cursor: pointer; }
+.credit-chart-controls button:first-child { border-radius: 0 7px 7px 0; }
+.credit-chart-controls button:last-child { border-radius: 7px 0 0 7px; }
+.credit-chart-controls button.active { background: #267e76; color: white; border-color: #267e76; }
+.credit-chart { width: 100%; height: 270px; margin: 10px 0; }
+.credit-provenance { color: #777c77; font-size: 11px; }
+.credit-changes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 15px; margin-top: 16px; padding: 12px; border-radius: 10px; background: #f3f6f3; color: #446259; font-size: 12px; }
+@media (max-width: 760px) { .credit-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .credit-chart-block .panel-title { align-items: stretch; flex-direction: column; } .credit-chart-controls { flex-wrap: wrap; align-items: start; } .credit-chart-controls select { max-width: 100%; } }

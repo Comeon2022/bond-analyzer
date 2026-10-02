@@ -5,6 +5,7 @@ import type { BondMarketRecord, BondFilters, LinkageType } from '../shared/bonds
 import { quoteAgeBusinessDays, applyBondFilters, matchGovernmentBenchmark, creditSpreadBp, spreadPerDuration } from '../shared/bonds';
 import { bondSourceStatus } from './bond-source';
 import { fetchJson, fetchText, fetchWorkbook, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseFredSeries, parsePolicyRate } from './sources';
+import { BOI_SECDWH_CSV_URL, BOI_SECDWH_DSD_URL, BOI_SECDWH_FLOW_URL, BOI_SECDWH_PAGE_URL, creditChanges, creditChangeBullet, fetchBoiXml, isCreditSeriesStale, parseBoiCodelist, parseBoiCreditCsv, parseBoiDsdCodelistRefs, resolveOfficialLabel, type CreditMetadata } from './credit';
 
 export interface Env { DB: D1Database; ASSETS: Fetcher; TASE_DATAHUB_API_KEY?: string; TASE_DATAHUB_BASE_URL?: string; ALLOWED_ORIGINS?: string; }
 interface DbObservation { observation_date: string; value: number; ingested_at: string; source_timestamp: string | null; revision_number: number; }
@@ -65,14 +66,15 @@ async function runWithStatus(db: D1Database, jobKey: string, work: (startedAt: s
     const completedAt = nowIso();
     await db.prepare('UPDATE ingestion_runs SET completed_at = ?, status = ?, records_read = ?, records_written = ?, details_json = ? WHERE id = ?')
       .bind(completedAt, 'success', result.read, result.written, JSON.stringify(result.details ?? {}), runId).run();
-    const sourceKey = jobKey.startsWith('cbs_') ? 'israel_cbs' : jobKey.startsWith('fred_') ? 'fred' : 'bank_of_israel';
+    const sourceKey = jobKey.startsWith('cbs_') ? 'israel_cbs' : jobKey.startsWith('fred_') ? 'fred' : jobKey.startsWith('boi_credit_') ? 'boi_credit_spreads' : 'bank_of_israel';
     await db.prepare('UPDATE data_sources SET last_success_at = ?, last_error_at = NULL, last_error_message = NULL, updated_at = ? WHERE key = ?')
       .bind(completedAt, completedAt, sourceKey).run();
   } catch (error) {
     const completedAt = nowIso();
     const message = error instanceof Error ? error.message : 'Unknown source error';
+    console.error('Scheduled ingestion job failed', jobKey, message.slice(0, 500));
     await db.prepare('UPDATE ingestion_runs SET completed_at = ?, status = ?, error_message = ? WHERE id = ?').bind(completedAt, 'error', message.slice(0, 500), runId).run();
-    const sourceKey = jobKey.startsWith('cbs_') ? 'israel_cbs' : jobKey.startsWith('fred_') ? 'fred' : 'bank_of_israel';
+    const sourceKey = jobKey.startsWith('cbs_') ? 'israel_cbs' : jobKey.startsWith('fred_') ? 'fred' : jobKey.startsWith('boi_credit_') ? 'boi_credit_spreads' : 'bank_of_israel';
     await db.prepare('UPDATE data_sources SET last_error_at = ?, last_error_message = ?, updated_at = ? WHERE key = ?').bind(completedAt, message.slice(0, 500), completedAt, sourceKey).run();
   }
 }
@@ -197,6 +199,172 @@ async function ingestAll(db: D1Database): Promise<void> {
   await ingestUsdIls(db);
   await ingestFredSeries(db, 'DGS10', 'us_10y_nominal');
   await ingestFredSeries(db, 'DFII10', 'us_10y_real');
+  await ingestCreditSpreads(db);
+}
+
+async function getBoiCreditMetadata(db: D1Database, rows: Awaited<ReturnType<typeof parseBoiCreditCsv>>, now = nowIso()): Promise<CreditMetadata> {
+  const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+  const getCached = async (key: string): Promise<Record<string, string> | null> => {
+    const row = await db.prepare('SELECT fetched_at,payload_hash,entries_json FROM credit_metadata_cache WHERE codelist_id=?').bind(key).first<{ fetched_at: string; payload_hash: string; entries_json: string }>();
+    if (!row) return null;
+    try { return JSON.parse(row.entries_json) as Record<string, string>; } catch { return null; }
+  };
+  const cacheFresh = async (key: string): Promise<boolean> => {
+    const row = await db.prepare('SELECT fetched_at FROM credit_metadata_cache WHERE codelist_id=?').bind(key).first<{ fetched_at: string }>();
+    return !!row && Date.parse(now) - Date.parse(row.fetched_at) < maxAgeMs;
+  };
+  const save = async (key: string, xml: string, entries: Record<string, string>): Promise<void> => {
+    await db.prepare('INSERT INTO credit_metadata_cache(codelist_id,fetched_at,payload_hash,entries_json) VALUES(?,?,?,?) ON CONFLICT(codelist_id) DO UPDATE SET fetched_at=excluded.fetched_at,payload_hash=excluded.payload_hash,entries_json=excluded.entries_json')
+      .bind(key, now, await sha256Text(xml), JSON.stringify(entries)).run();
+  };
+
+  let refs = await getCached('__SECDWH_DSD__');
+  if (!(await cacheFresh('__SECDWH_DSD__'))) {
+    try {
+      const dsdXml = await fetchBoiXml(BOI_SECDWH_DSD_URL);
+      const found = parseBoiDsdCodelistRefs(dsdXml);
+      if (Object.keys(found).length) { refs = found; await save('__SECDWH_DSD__', dsdXml, found); }
+    } catch { /* Cached official metadata remains usable; unresolved codes stay explicit. */ }
+  }
+  refs ??= {};
+  const neededCodes: Record<string, Set<string>> = {
+    COMP_CATEGORY: new Set(rows.map((row) => row.compCategoryCode).filter(Boolean)),
+    COMP_NAME: new Set(rows.map((row) => row.compNameCode).filter(Boolean)),
+    INDEXATION_TYPE: new Set(rows.map((row) => row.indexationTypeCode).filter(Boolean)),
+    SEC_RANK_GROUP: new Set(rows.map((row) => row.secRankGroupCode).filter(Boolean)),
+    ISSUER_SECTOR: new Set(rows.map((row) => row.issuerSectorCode).filter(Boolean)),
+    UNIT_MEASURE: new Set(rows.map((row) => row.unitMeasure).filter(Boolean)),
+  };
+  const codelists: Record<string, Record<string, string>> = {};
+  for (const [dimension, codelistId] of Object.entries(refs)) {
+    let entries = await getCached(codelistId);
+    const required = neededCodes[dimension] ?? new Set<string>();
+    if (!(await cacheFresh(codelistId)) || [...required].some((code) => !entries?.[code])) {
+      try {
+        const xml = await fetchBoiXml(`https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/structure/codelist/BOI.STATISTICS/${encodeURIComponent(codelistId)}/1.0`);
+        const allOfficialEntries = parseBoiCodelist(xml);
+        const officialEntries = Object.fromEntries([...required].map((code) => [code, allOfficialEntries[code] ?? '__UNRESOLVED__']));
+        if (Object.keys(officialEntries).length) { entries = officialEntries; await save(codelistId, xml, officialEntries); }
+      } catch { /* Keep the last successful copy, if one exists. */ }
+    }
+    codelists[dimension] = entries ?? {};
+  }
+  return { codelists, fetchedAt: now, unresolvedCount: 0 };
+}
+
+async function ingestCreditSpreads(db: D1Database): Promise<void> {
+  await runWithStatus(db, 'boi_credit_spreads', async (startedAt) => {
+    const response = await fetchText(BOI_SECDWH_CSV_URL);
+    const rows = await parseBoiCreditCsv(response.text);
+    const metadata = await getBoiCreditMetadata(db, rows, startedAt);
+    const grouped = new Map<string, typeof rows>();
+    for (const row of rows) grouped.set(row.seriesCode, [...(grouped.get(row.seriesCode) ?? []), row]);
+    const seriesStatements: D1PreparedStatement[] = [];
+    const observationStatements: D1PreparedStatement[] = [];
+    for (const [seriesCode, seriesRows] of grouped) {
+      const latestRow = seriesRows.at(-1)!;
+    const meta = {
+        compCategoryLabel: resolveOfficialLabel(metadata, 'COMP_CATEGORY', latestRow.compCategoryCode),
+        compNameLabel: resolveOfficialLabel(metadata, 'COMP_NAME', latestRow.compNameCode),
+        indexationTypeLabel: resolveOfficialLabel(metadata, 'INDEXATION_TYPE', latestRow.indexationTypeCode),
+        secRankGroupLabel: resolveOfficialLabel(metadata, 'SEC_RANK_GROUP', latestRow.secRankGroupCode),
+        issuerSectorLabel: resolveOfficialLabel(metadata, 'ISSUER_SECTOR', latestRow.issuerSectorCode),
+        unitMeasureLabel: resolveOfficialLabel(metadata, 'UNIT_MEASURE', latestRow.unitMeasure),
+      };
+      const metadataJson = JSON.stringify({ ...latestRow, ...meta, boiDataflow: 'BOI.STATISTICS:SECDWH:1.0' });
+      seriesStatements.push(db.prepare(`INSERT INTO credit_spread_series(series_code,frequency,comp_category_code,comp_category_label,comp_name_code,comp_name_label,indexation_type_code,indexation_type_label,sec_rank_group_code,sec_rank_group_label,issuer_sector_code,issuer_sector_label,unit_measure,unit_measure_label,source,metadata_json,first_seen_at,last_seen_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(series_code) DO UPDATE SET frequency=excluded.frequency,comp_category_code=excluded.comp_category_code,comp_category_label=excluded.comp_category_label,comp_name_code=excluded.comp_name_code,comp_name_label=excluded.comp_name_label,indexation_type_code=excluded.indexation_type_code,indexation_type_label=excluded.indexation_type_label,sec_rank_group_code=excluded.sec_rank_group_code,sec_rank_group_label=excluded.sec_rank_group_label,issuer_sector_code=excluded.issuer_sector_code,issuer_sector_label=excluded.issuer_sector_label,unit_measure=excluded.unit_measure,unit_measure_label=excluded.unit_measure_label,source=excluded.source,metadata_json=excluded.metadata_json,last_seen_at=excluded.last_seen_at`)
+        .bind(seriesCode, latestRow.frequency, latestRow.compCategoryCode, meta.compCategoryLabel, latestRow.compNameCode, meta.compNameLabel, latestRow.indexationTypeCode, meta.indexationTypeLabel, latestRow.secRankGroupCode, meta.secRankGroupLabel, latestRow.issuerSectorCode, meta.issuerSectorLabel, latestRow.unitMeasure, meta.unitMeasureLabel, 'Bank of Israel SECDWH', metadataJson, startedAt, startedAt));
+      for (const row of seriesRows) {
+        observationStatements.push(db.prepare(`INSERT OR IGNORE INTO credit_spread_observations(series_code,time_period,observation_value,release_status,payload_hash,ingested_at,revision_number)
+          SELECT ?,?,?,?,?,?,COALESCE((SELECT MAX(revision_number)+1 FROM credit_spread_observations WHERE series_code=? AND time_period=?),1)`)
+          .bind(row.seriesCode, row.timePeriod, row.observationValue, row.releaseStatus, row.payloadHash, startedAt, row.seriesCode, row.timePeriod));
+      }
+    }
+    const batchRun = async (statements: D1PreparedStatement[]) => {
+      let changed = 0;
+      for (let i = 0; i < statements.length; i += 100) {
+        const result = await db.batch(statements.slice(i, i + 100));
+        changed += result.reduce((total, item) => total + item.meta.changes, 0);
+      }
+      return changed;
+    };
+    await batchRun(seriesStatements);
+    const written = await batchRun(observationStatements);
+    return { read: rows.length, written, details: { sourceUrl: response.sourceUrl, sourcePage: BOI_SECDWH_PAGE_URL, metadataUrl: BOI_SECDWH_DSD_URL, flowMetadataUrl: BOI_SECDWH_FLOW_URL, payloadHash: response.rawHash, seriesDiscovered: grouped.size, observationThrough: rows.at(-1)?.timePeriod, metadataCodelists: Object.keys(metadata.codelists) } };
+  });
+}
+
+interface CreditSeriesDb {
+  series_code: string; frequency: string | null; comp_category_code: string | null; comp_category_label: string | null;
+  comp_name_code: string | null; comp_name_label: string | null; indexation_type_code: string | null; indexation_type_label: string | null;
+  sec_rank_group_code: string | null; sec_rank_group_label: string | null; issuer_sector_code: string | null; issuer_sector_label: string | null;
+  unit_measure: string | null; unit_measure_label: string | null; source: string; metadata_json: string; first_seen_at: string; last_seen_at: string;
+}
+interface CreditObservationDb { time_period: string; observation_value: number; release_status: string | null; payload_hash: string; ingested_at: string; revision_number: number; }
+
+async function creditSourceStatus(db: D1Database) {
+  const [source, count, latest] = await Promise.all([
+    db.prepare('SELECT last_success_at,last_error_at,last_error_message FROM data_sources WHERE key=?').bind('boi_credit_spreads').first<{ last_success_at: string | null; last_error_at: string | null; last_error_message: string | null }>(),
+    db.prepare('SELECT COUNT(*) AS observations,COUNT(DISTINCT series_code) AS series FROM latest_credit_spread_observations').first<{ observations: number; series: number }>(),
+    db.prepare('SELECT MAX(time_period) AS latest_period FROM latest_credit_spread_observations').first<{ latest_period: string | null }>(),
+  ]);
+  return { name: 'BOI SECDWH corporate spreads', sourceUrl: BOI_SECDWH_CSV_URL, sourcePage: BOI_SECDWH_PAGE_URL,
+    lastSuccessAt: source?.last_success_at ?? null, lastErrorAt: source?.last_error_at ?? null, lastError: source?.last_error_message ?? null,
+    latestObservationPeriod: latest?.latest_period ?? null, observationCount: count?.observations ?? 0, seriesCount: count?.series ?? 0,
+    stale: latest?.latest_period ? isCreditSeriesStale(latest.latest_period) : true, status: !latest?.latest_period ? 'pending' : isCreditSeriesStale(latest.latest_period) ? 'stale' : source?.last_error_at && (!source.last_success_at || source.last_error_at > source.last_success_at) ? 'error' : 'healthy' };
+}
+
+function seriesLabel(row: CreditSeriesDb): string {
+  const labels = [row.comp_name_label, row.issuer_sector_label, row.sec_rank_group_label].filter((label): label is string => !!label && !label.includes('לא זוהה במטא־דאטה') && label !== 'לא זמין');
+  return labels.length ? [...new Set(labels)].join(' · ') : `${row.series_code} — לא זוהה במטא־דאטה`;
+}
+
+async function creditHistory(db: D1Database, code: string): Promise<CreditObservationDb[]> {
+  const rows = await db.prepare('SELECT time_period,observation_value,release_status,payload_hash,ingested_at,revision_number FROM latest_credit_spread_observations WHERE series_code=? ORDER BY time_period').bind(code).all<CreditObservationDb>();
+  return rows.results;
+}
+
+async function creditSeriesPayload(db: D1Database, row: CreditSeriesDb) {
+  const history = await creditHistory(db, row.series_code);
+  const latest = history.at(-1) ?? null;
+  const changes = creditChanges(history.map((row) => ({ timePeriod: row.time_period, observationValue: row.observation_value })), row.unit_measure === 'PT' || row.unit_measure === 'PD' ? 100 : null);
+  const label = seriesLabel(row);
+  return { seriesCode: row.series_code, label, frequency: row.frequency, compCategoryCode: row.comp_category_code, compCategoryLabel: row.comp_category_label,
+    compNameCode: row.comp_name_code, compNameLabel: row.comp_name_label, indexationTypeCode: row.indexation_type_code, indexationTypeLabel: row.indexation_type_label,
+    secRankGroupCode: row.sec_rank_group_code, secRankGroupLabel: row.sec_rank_group_label, issuerSectorCode: row.issuer_sector_code, issuerSectorLabel: row.issuer_sector_label,
+    unitMeasure: row.unit_measure, unitMeasureLabel: row.unit_measure_label, source: row.source, sourceUrl: BOI_SECDWH_PAGE_URL, metadata: JSON.parse(row.metadata_json),
+    latest: latest ? { timePeriod: latest.time_period, value: latest.observation_value, releaseStatus: latest.release_status } : null,
+    latestObservationPeriod: latest?.time_period ?? null, ...changes, stale: latest ? isCreditSeriesStale(latest.time_period) : true,
+    metadataResolved: [row.comp_category_label, row.comp_name_label, row.indexation_type_label, row.sec_rank_group_label, row.issuer_sector_label, row.unit_measure_label].filter((value) => !!value && !value.includes('לא זוהה במטא־דאטה')).length,
+    history: history.map((item) => ({ timePeriod: item.time_period, value: item.observation_value, releaseStatus: item.release_status, ingestedAt: item.ingested_at, revision: item.revision_number })) };
+}
+
+async function getCreditSeries(db: D1Database) {
+  const rows = await db.prepare('SELECT * FROM credit_spread_series ORDER BY series_code').all<CreditSeriesDb>();
+  return Promise.all(rows.results.map((row) => creditSeriesPayload(db, row)));
+}
+
+async function getCreditSummary(db: D1Database) {
+  const [series, sourceStatus] = await Promise.all([getCreditSeries(db), creditSourceStatus(db)]);
+  const present = series.filter((row) => row.latest);
+  const periods = new Map<string, number>();
+  for (const row of present) for (const point of row.history) periods.set(point.timePeriod, (periods.get(point.timePeriod) ?? 0) + 1);
+  const commonPeriod = [...periods].filter(([, count]) => count === present.length).map(([period]) => period).sort().at(-1) ?? null;
+  const threeMonth = present.filter((row) => row.change3m !== null);
+  const widest = [...present].sort((a, b) => a.latest!.value - b.latest!.value).at(-1) ?? null;
+  const narrowest = [...present].sort((a, b) => a.latest!.value - b.latest!.value)[0] ?? null;
+  const largestWidening = [...threeMonth].sort((a, b) => (b.change3m ?? 0) - (a.change3m ?? 0))[0] ?? null;
+  const largestNarrowing = [...threeMonth].sort((a, b) => (a.change3m ?? 0) - (b.change3m ?? 0))[0] ?? null;
+  const unresolvedSeriesCount = series.filter((row) => [row.compCategoryLabel,row.compNameLabel,row.indexationTypeLabel,row.secRankGroupLabel,row.issuerSectorLabel,row.unitMeasureLabel].some((value) => !!value && value.includes('לא זוהה במטא־דאטה'))).length;
+  const bullets = series.flatMap((row) => [creditChangeBullet(row.label, row.change1m, 1), creditChangeBullet(row.label, row.change3m, 3)]).filter((line): line is string => !!line);
+  return { seriesCount: series.length, latestCommonObservationPeriod: commonPeriod,
+    widestCurrentSpread: widest ? { seriesCode: widest.seriesCode, label: widest.label, value: widest.latest!.value, timePeriod: widest.latest!.timePeriod } : null,
+    narrowestCurrentSpread: narrowest ? { seriesCode: narrowest.seriesCode, label: narrowest.label, value: narrowest.latest!.value, timePeriod: narrowest.latest!.timePeriod } : null,
+    largest3mWidening: largestWidening ? { seriesCode: largestWidening.seriesCode, label: largestWidening.label, changeBp: largestWidening.change3m } : null,
+    largest3mNarrowing: largestNarrowing ? { seriesCode: largestNarrowing.seriesCode, label: largestNarrowing.label, changeBp: largestNarrowing.change3m } : null,
+    coverage: { seriesWithData: present.length, seriesWithoutData: series.length - present.length, metadataResolvedSeries: series.length - unresolvedSeriesCount, metadataUnresolvedSeries: unresolvedSeriesCount }, sourceStatus, changes: { bullets } };
 }
 
 async function getHistory(db: D1Database, seriesId: string, limit = 500): Promise<DbObservation[]> {
@@ -522,6 +690,18 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
 
 async function handleApi(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  if (request.method === 'GET' && url.pathname === '/api/credit/spreads') {
+    const [series, sourceStatus] = await Promise.all([getCreditSeries(env.DB), creditSourceStatus(env.DB)]);
+    return json({ series, sourceStatus, source: BOI_SECDWH_PAGE_URL, dataflow: 'BOI.STATISTICS:SECDWH:1.0' });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/credit/summary') return json(await getCreditSummary(env.DB));
+  const creditSeriesMatch = request.method === 'GET' ? url.pathname.match(/^\/api\/credit\/spreads\/([A-Za-z0-9_-]+)$/) : null;
+  if (creditSeriesMatch) {
+    const row = await env.DB.prepare('SELECT * FROM credit_spread_series WHERE series_code=?').bind(creditSeriesMatch[1]).first<CreditSeriesDb>();
+    if (!row) return json({ error: 'Unknown BOI spread series code' }, 404);
+    const series = await creditSeriesPayload(env.DB, row);
+    return json({ ...series, sourceStatus: await creditSourceStatus(env.DB), changes: { change1m: series.change1m, change3m: series.change3m, change12m: series.change12m } });
+  }
   if (request.method === 'GET' && url.pathname === '/api/health') {
     try {
       await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
@@ -630,11 +810,13 @@ export default {
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil((async () => {
+      console.log('Scheduled dashboard ingestion started');
       await ingestAll(env.DB);
       await refreshBondBenchmarks(env.DB);
       const overview = await getOverview(env.DB);
       await persistSignalSnapshots(env.DB, overview.signals);
       await persistRegimeSnapshot(env.DB, overview);
+      console.log('Scheduled dashboard ingestion completed');
     })());
   },
 };
