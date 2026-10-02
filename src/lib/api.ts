@@ -44,9 +44,31 @@ async function responsePayload<T>(path: string): Promise<T> {
   return payload as T;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function apiGet<T>(path: string): Promise<T> {
   return responsePayload<T>(path);
 }
 
-export const getOverview = () => apiGet<OverviewResponse>('/api/overview');
-export const getApiHealth = () => apiGet<ApiHealth>('/api/health');
+export async function getOverview(): Promise<OverviewResponse> {
+  const payload = await apiGet<unknown>('/api/overview');
+  if (!isRecord(payload) || typeof payload.generatedAt !== 'string' || !isRecord(payload.regime)
+    || !Array.isArray(payload.cards) || !Array.isArray(payload.signals) || !isRecord(payload.inflation)
+    || !isRecord(payload.curves) || !Array.isArray(payload.curves.real) || !Array.isArray(payload.curves.nominal)
+    || !Array.isArray(payload.sources) || !isRecord(payload.expectations) || !isRecord(payload.markets)
+    || !isRecord(payload.changes) || !isRecord(payload.bondScreener) || !Array.isArray(payload.regimeHistory)) {
+    throw new ApiError('שרת הנתונים החזיר מבנה סקירה לא תקין.');
+  }
+  return payload as unknown as OverviewResponse;
+}
+
+export async function getApiHealth(): Promise<ApiHealth> {
+  const payload = await apiGet<unknown>('/api/health');
+  if (!isRecord(payload) || payload.ok !== true || payload.service !== 'bond-analyzer-api'
+    || typeof payload.timestamp !== 'string' || payload.database !== 'reachable') {
+    throw new ApiError('בדיקת תקינות שרת הנתונים נכשלה.');
+  }
+  return payload as unknown as ApiHealth;
+}

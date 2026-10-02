@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiGet, apiUrl } from './api';
+import { apiGet, apiUrl, getOverview } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -21,5 +21,10 @@ describe('frontend API client', () => {
   it('returns typed JSON payloads on success', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ ok: true })));
     await expect(apiGet<{ ok: boolean }>('/api/health')).resolves.toEqual({ ok: true });
+  });
+
+  it('rejects an overview response with a missing/null schema instead of rendering it as data', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ generatedAt: null, cards: null })));
+    await expect(getOverview()).rejects.toMatchObject({ message: 'שרת הנתונים החזיר מבנה סקירה לא תקין.' });
   });
 });
