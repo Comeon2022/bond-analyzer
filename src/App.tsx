@@ -5,6 +5,7 @@ import {
 import type { MacroCard, OverviewResponse, SignalStatus, SourceStatus, YieldPoint } from '../shared/types';
 import type { BondMarketRecord } from '../shared/bonds';
 import { matchGovernmentBenchmark } from '../shared/bonds';
+import { buildOutlookSummary, regimeLabel } from '../shared/outlook';
 import { ApiError, apiGet, getApiHealth, getOverview } from './lib/api';
 import type { BondBenchmarkResponse, BondDetailResponse, BondHistoryResponse } from './lib/api-types';
 import CreditPanel from './CreditPanel';
@@ -410,6 +411,7 @@ function App() {
 
   useEffect(() => { void loadData(); }, []);
   const signalByKey = useMemo(() => new Map(data?.signals.map((signal) => [signal.key, signal]) ?? []), [data?.signals]);
+  const outlook = useMemo(() => data ? buildOutlookSummary({ regime: data.regime, signals: data.signals }) : null, [data]);
 
 
   return <main className="app-shell">
@@ -422,8 +424,27 @@ function App() {
       {apiState==='no-data'&&<div className="info-banner" role="status"><b>ה־Worker ומסד הנתונים זמינים, אך עדיין אין תצפיות מאקרו.</b><span>הנתונים יופיעו לאחר קליטת התצפיות הראשונות מהמקורות.</span></div>}
 
       <section className="regime-panel" aria-labelledby="regime-title">
-        <div className="regime-main"><div className="regime-icon">◈</div><div className="regime-copy"><div className="eyebrow">תמונת מצב · ישראל</div><h2 id="regime-title">{data ? ({ green: 'סביבה תומכת בירידת תשואות', yellow: 'סביבה מעורבת', red: 'סביבה תומכת בעליית תשואות', unknown: 'ממתין לנתוני שוק' } as const)[data.regime.status] : 'מתחבר לנתונים'}</h2><p>מדדים תיאוריים בלבד — לא המלצת השקעה ולא תחזית לתשואה.</p></div></div>
-        <div className="regime-stats"><div className="regime-stat"><b>{data?.regime.green ?? '—'}</b><span><i className="dot-green" />חיוביים</span></div><div className="regime-stat"><b>{data?.regime.yellow ?? '—'}</b><span><i className="dot-yellow" />מעורבים</span></div><div className="regime-stat"><b>{data?.regime.red ?? '—'}</b><span><i className="dot-red" />שליליים</span></div><div className="confidence-stat"><span>שלמות ואחידות נתונים</span><b>{data?.regime.confidence ?? 'ממתין'}</b><div className="confidence-meter"><i style={{ width: data ? `${data.regime.coveragePct}%` : '0%' }} /></div></div></div>
+        <div className="regime-layout">
+          <div className="regime-outlook">
+            <div className="eyebrow">תחזית קדימה · תמונת מצב בישראל</div>
+            <h2 id="regime-title">{outlook?.overallLabel ?? 'מתחבר לנתונים'}</h2>
+            <div className="current-state"><span>מצב נוכחי</span><p>{outlook?.currentState ?? 'ממתין לאיתותים מאומתים.'}</p></div>
+            <div className="base-case"><span>תחזית קדימה — תרחיש בסיס</span><p>{outlook?.baseCaseText ?? 'התרחיש יופיע לאחר טעינת איתותי המקור.'}</p></div>
+            <div className="outlook-lists">
+              <div><h3>מסקנות מהמצב הקיים</h3><ul>{(outlook?.conclusionBullets ?? ['ממתין לנתוני מקור.']).map((bullet, index) => <li key={`conclusion-${index}`}>{bullet}</li>)}</ul></div>
+              <div><h3>מה יכול לשנות את התמונה</h3><ul>{(outlook?.riskTriggerBullets ?? ['שינוי באינפלציה ובציפיות לה.','שינוי בתשואות הארוכות.','שינוי בתנאי הסיכון בישראל.']).map((bullet, index) => <li key={`trigger-${index}`}>{bullet}</li>)}</ul></div>
+            </div>
+          </div>
+          <aside className="regime-rail" aria-label="סיכום איתותים">
+            <div className="legacy-regime"><span>סיווג משוקלל נוכחי</span><b>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</b></div>
+            <div className="regime-stats">
+              <div className="regime-stat"><b>{data?.regime.green ?? '—'}</b><span><i className="dot-green" />חיוביים</span></div>
+              <div className="regime-stat"><b>{data?.regime.yellow ?? '—'}</b><span><i className="dot-yellow" />מעורבים</span></div>
+              <div className="regime-stat"><b>{data?.regime.red ?? '—'}</b><span><i className="dot-red" />שליליים</span></div>
+            </div>
+            <div className="confidence-stat"><span>רמת ביטחון</span><b>{outlook?.confidenceLabel ?? 'ממתין'}</b><div className="confidence-meter"><i style={{ width: data ? `${data.regime.coveragePct}%` : '0%' }} /></div><span>כיסוי איתותים</span><b>{data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'}</b></div>
+          </aside>
+        </div>
         <div className="regime-foot"><span>משוקלל לפי הגדרות מרכזיות · מידע חסר אינו נחשב ניטרלי</span><span>עדכון: {dateLabel(data?.generatedAt)}</span></div>
       </section>
 

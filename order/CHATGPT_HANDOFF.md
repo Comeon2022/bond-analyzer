@@ -178,3 +178,22 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Manual production ingestion: not run. Production series count and latest observation period remain as previously reported under Phase 1D (no persisted production BOI rows verified yet).
 - Required operator action: run `npx wrangler secret put ADMIN_INGEST_TOKEN`, then use the PowerShell invocation in `README.md`; verify `/api/health`, `/api/credit/spreads`, and `/api/credit/summary` afterward.
 - Implementation commit `d873139` (`Add secure manual ingestion endpoint`) was pushed to `origin/main`. The deployment/handoff follow-up commit is pending.
+
+## Phase 1F deterministic outlook and conclusions card — 2026-10-02
+
+### Implemented
+
+- Added `shared/outlook.ts`, a deterministic interpretation layer driven by the weighted regime status/coverage and the rate, CPI, inflation-expectations, long-real-yield, long-yield-momentum, and Israel-risk signal statuses. It produces a current-state sentence, a conditional base case, three data-dependent conclusions, three risk triggers, and one of the requested confidence labels. No model-generated text or investment recommendation language is used.
+- The outlook distinguishes positive-moderate, mixed, cautious, and insufficient-data states. Confidence is reduced for low coverage or conflicting long-end signals. Optional aggregate credit context can add one conclusion when supplied; the overview currently does not supply that separate credit API payload, so it is omitted in the dashboard.
+- Reworked the existing top regime card in `src/App.tsx` into an RTL executive summary with current state, larger base-case text, conclusions, and “what can change the picture.” Its right metrics rail retains the previous weighted regime label, green/yellow/red counts, coverage percentage/meter, and adds the outlook confidence label.
+- Added responsive card styling in `src/styles.css` and scenario/language tests in `shared/outlook.test.ts` for positive, mixed, negative, low-coverage, confidence, optional credit, deterministic Hebrew snapshot, and forbidden wording cases.
+
+### Verification and deployment
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (48 tests across 9 files).
+- `npm run build`: passed.
+- `npx wrangler deploy --dry-run`: passed.
+- This phase changes only shared interpretation code and the frontend; no Worker/API deployment is required. No GitHub Actions deployment workflow or direct Pages deployment command is present in the repository. The changes are being published to the dashboard's verified `main` branch; Cloudflare Pages production rollout was not independently verified here.
+- Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
+- Remaining UX follow-up: the credit summary endpoint is separate from the macro overview; pass its aggregate summary into the outlook only if the UI later adopts an explicit shared loading/error state for that source.
