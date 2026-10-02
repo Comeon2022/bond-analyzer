@@ -8,7 +8,11 @@ export function apiUrl(path: string): string {
 }
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number | null = null) {
+  constructor(
+    message: string,
+    readonly status: number | null = null,
+    readonly kind: 'network' | 'http' | 'invalid-response' | 'schema' = 'http',
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -26,20 +30,21 @@ async function responsePayload<T>(path: string): Promise<T> {
   try {
     response = await fetch(apiUrl(path), { headers: { accept: 'application/json' } });
   } catch {
-    throw new ApiError('לא ניתן להתחבר לשרת הנתונים. בדקו את כתובת ה־API ואת זמינות ה־Worker.');
+    const endpoint = API_BASE_URL || 'כתובת האתר הנוכחית';
+    throw new ApiError(`לא ניתן ליצור קשר עם שרת הנתונים (${endpoint}). בדקו את VITE_API_BASE_URL ואת זמינות ה־Worker.`, null, 'network');
   }
 
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
-    throw new ApiError(`שרת הנתונים החזיר תשובה לא תקינה (${response.status}).`, response.status);
+    throw new ApiError(`תשובת שרת הנתונים אינה JSON תקין (HTTP ${response.status}).`, response.status, 'invalid-response');
   }
   if (!response.ok) {
-    const message = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
+    const detail = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
       ? payload.error
       : `בקשת הנתונים נכשלה (${response.status}).`;
-    throw new ApiError(message, response.status);
+    throw new ApiError(`HTTP ${response.status}: ${detail}`, response.status, 'http');
   }
   return payload as T;
 }
@@ -59,7 +64,7 @@ export async function getOverview(): Promise<OverviewResponse> {
     || !isRecord(payload.curves) || !Array.isArray(payload.curves.real) || !Array.isArray(payload.curves.nominal)
     || !Array.isArray(payload.sources) || !isRecord(payload.expectations) || !isRecord(payload.markets)
     || !isRecord(payload.changes) || !isRecord(payload.bondScreener) || !Array.isArray(payload.regimeHistory)) {
-    throw new ApiError('שרת הנתונים החזיר מבנה סקירה לא תקין.');
+    throw new ApiError('שרת הנתונים החזיר מבנה סקירה לא תקין.', null, 'schema');
   }
   return payload as unknown as OverviewResponse;
 }
@@ -68,7 +73,7 @@ export async function getApiHealth(): Promise<ApiHealth> {
   const payload = await apiGet<unknown>('/api/health');
   if (!isRecord(payload) || payload.ok !== true || payload.service !== 'bond-analyzer-api'
     || typeof payload.timestamp !== 'string' || payload.database !== 'reachable') {
-    throw new ApiError('בדיקת תקינות שרת הנתונים נכשלה.');
+    throw new ApiError('בדיקת תקינות שרת הנתונים נכשלה.', null, 'schema');
   }
   return payload as unknown as ApiHealth;
 }

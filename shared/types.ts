@@ -85,7 +85,7 @@ export interface RiskComponent {
 export interface RiskProxy {
   value: number | null;
   status: SignalStatus;
-  label: 'Israel Risk Conditions Proxy';
+  label: 'פרוקסי תנאי הסיכון בישראל';
   components: RiskComponent[];
   coverage: number;
   explanationHe: string;

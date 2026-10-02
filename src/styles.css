@@ -34,7 +34,10 @@ a { color: inherit; text-decoration: none; }
 .api-connection { color: #667688; font-size: 10px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .api-connection .source-dot { width: 7px; height: 7px; }
 .api-connection.api-connected { color: #356f5b; }
-.api-connection.api-unavailable { color: #9a5148; }
+.api-connection.api-worker-unavailable, .api-connection.api-database-unavailable, .api-connection.api-api-error { color: #9a5148; }
+.api-connection.api-no-data { color: #8a6a36; }
+.info-banner { margin-bottom: 15px; padding: 11px 13px; border: 1px solid #dce6ed; background: #f3f8fb; border-radius: 8px; display: flex; flex-direction: column; gap: 3px; color: #426174; font-size: 10px; }
+.info-banner span { color: #627c8c; }
 .api-connection.api-checking { color: #718092; }
 .market-pulse { width: 7px; height: 7px; border-radius: 50%; background: #17976a; box-shadow: 0 0 0 3px #e7f5ef; }
 .refresh-button { background: white; border: 1px solid #dce3e9; border-radius: 7px; height: 33px; display: inline-flex; gap: 7px; align-items: center; padding: 0 11px; color: #465a70; cursor: pointer; font-size: 11px; transition: background .15s, border-color .15s; }

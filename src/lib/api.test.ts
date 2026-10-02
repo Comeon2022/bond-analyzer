@@ -12,10 +12,10 @@ describe('frontend API client', () => {
 
   it('turns HTTP and network failures into readable API errors', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Not found' }), { status: 404 })));
-    await expect(apiGet('/api/missing')).rejects.toMatchObject({ status: 404, message: 'Not found' });
+    await expect(apiGet('/api/missing')).rejects.toMatchObject({ status: 404, kind: 'http', message: 'HTTP 404: Not found' });
 
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
-    await expect(apiGet('/api/health')).rejects.toMatchObject({ status: null });
+    await expect(apiGet('/api/health')).rejects.toMatchObject({ status: null, kind: 'network' });
   });
 
   it('returns typed JSON payloads on success', async () => {

@@ -1,4 +1,4 @@
-﻿# ChatGPT Handoff - Israel Macro/Rates Dashboard
+# ChatGPT Handoff - Israel Macro/Rates Dashboard
 
 ## Phase 1A / 1B foundation
 
@@ -86,7 +86,7 @@ Midroog's IEC issuer/series page is recorded as an official rating source candid
 
 At the end of the original Phase 1C implementation, `git rev-parse --show-toplevel` returned "not a git repository." The later GitHub/frontend addendum below records the current initialized dashboard repository and its Git actions. RAGOps was not touched.
 
-## GitHub / Cloudflare frontend connection addendum â€” 2026-10-02
+## GitHub / Cloudflare frontend connection addendum — 2026-10-02
 
 ### Frontend and Worker changes
 
@@ -118,3 +118,13 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 2. Deploy the Worker; configure `ALLOWED_ORIGINS` with the exact Pages origin and verify `/api/health` plus `/api/overview`.
 3. Connect Pages to `Comeon2022/bond-analyzer`, branch `main`, React (Vite), command `npm run build`, output `dist`, blank root directory. Set Pages `VITE_API_BASE_URL` to the deployed Worker origin and rebuild.
 4. Verify browser loading, source staleness/source-pending states, and no CORS errors. TASE market data remains source-pending until licensed API entitlement and schema are supplied, as documented above.
+
+## UTF-8 and frontend API diagnostics — 2026-10-02
+
+- Audited the deployed Pages HTML and bundle. The HTML returned HTTP 200 with UTF-8 content and already declared `<meta charset="UTF-8">`; the deployed JavaScript contained 143 common mojibake-pattern matches and no Hebrew characters. Corrected the damaged Hebrew literals in the frontend and Worker UI-facing strings. Added an explicit UTF-8 charset declaration/title/description to `index.html`; corrected the RTL/timezone footer and localized the remaining screener labels, source names, risk explanations, and pending-source text.
+- The source scan found no mojibake markers in `src`, `worker`, `shared`, or `index.html` after repair (the close-button `×` is intentional). The production HTML title and description now contain proper Hebrew.
+- Confirmed the frontend reads `import.meta.env.VITE_API_BASE_URL` at build time. Built with a sample Worker URL and verified that value appears in the emitted frontend bundle. API errors now identify `HTTP <status>: <response detail>` and network errors identify endpoint plus the `VITE_API_BASE_URL`/Worker availability check; API failures retain the last valid data where available.
+- The app distinguishes a failed Worker connection, an available Worker with unavailable database, general API/HTTP errors, and successful connectivity with no observations yet. The no-data banner appears only after health and overview succeed and macro card observations are empty.
+- Verification: `npm run typecheck` passed; `npm test` passed (25 tests across 6 files); `VITE_API_BASE_URL=https://bond-analyzer-api.example.workers.dev npm run build` passed. The sample value is for build-time configuration verification only, not a deployed endpoint.
+- The Pages site was inspected before changes; its previously published bundle was corrupted. Pushing these source changes to `main` will trigger the repository's configured Pages build if that integration is active. No direct production deployment was performed.
+- Repository identity rechecked before Git actions: dashboard root and `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; no RAGOps repository was touched. This audit/fix commit and push will be recorded here after completion.

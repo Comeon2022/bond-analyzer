@@ -33,13 +33,13 @@ export function riskConditionsProxy(inputs: RiskInputs, thresholds: RiskThreshol
     return { key: input.key, value: input.value, unit: input.unit, normalizedScore: classified.score, status: classified.status, sourceObservationDate: input.date };
   });
   const available = components.filter((component) => component.normalizedScore !== null);
-  if (!available.length) return { value: null, status: 'unknown', label: 'Israel Risk Conditions Proxy', components, coverage: 0, explanationHe: 'אין די רכיבי מקור מאומתים לחישוב תנאי הסיכון.' };
+  if (!available.length) return { value: null, status: 'unknown', label: 'פרוקסי תנאי הסיכון בישראל', components, coverage: 0, explanationHe: 'אין די רכיבי מקור מאומתים לחישוב תנאי הסיכון.' };
   const score = available.reduce((sum, component) => sum + component.normalizedScore!, 0) / available.length;
   const status: SignalStatus = score >= 0.5 ? 'green' : score <= -0.5 ? 'red' : 'yellow';
   return {
     value: score,
     status,
-    label: 'Israel Risk Conditions Proxy',
+    label: 'פרוקסי תנאי הסיכון בישראל',
     components,
     coverage: available.length / components.length,
     explanationHe: 'מדד תנאי סיכון ישראל הוא פרוקסי שקוף המבוסס על שער החליפין ופערי תשואות; הוא אינו ציטוט CDS או מדד סחיר.',
