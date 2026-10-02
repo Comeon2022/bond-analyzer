@@ -173,7 +173,8 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 
 - Cloudflare `wrangler secret list` returned no configured secrets, so `ADMIN_INGEST_TOKEN` was not configured. No authenticated request or live ingestion was attempted. The deployed endpoint returns 503 for a well-formed bearer request until the secret is set.
 - `npm run typecheck`: passed. `npm test`: passed (41 tests across 8 files). `npm run build`: passed. `npx wrangler deploy --dry-run`: passed; Wrangler resolved the configured `bond-analyzer-db` D1 binding and Worker assets.
-- Worker deployment and post-deploy API checks: pending.
+- Worker deployed successfully to `https://israel-macro-rates-dashboard.karu-lior.workers.dev`; version `a8ecbb59-9ab9-4b60-bb9b-e03d981a0b82`, schedule unchanged (`30 16 * * 1-5`).
+- Post-deploy checks: `/api/health` returned HTTP 200 with D1 reachable; `/api/credit/spreads` and `/api/credit/summary` returned HTTP 200 and the expected empty/pending state (0 persisted series, no latest observation period). An unauthenticated `GET /api/admin/ingest` returned HTTP 405 with `Allow: POST`.
 - Manual production ingestion: not run. Production series count and latest observation period remain as previously reported under Phase 1D (no persisted production BOI rows verified yet).
 - Required operator action: run `npx wrangler secret put ADMIN_INGEST_TOKEN`, then use the PowerShell invocation in `README.md`; verify `/api/health`, `/api/credit/spreads`, and `/api/credit/summary` afterward.
-- Phase 1E commit: pending.
+- Implementation commit `d873139` (`Add secure manual ingestion endpoint`) was pushed to `origin/main`. The deployment/handoff follow-up commit is pending.
