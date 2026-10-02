@@ -1,0 +1,25 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { apiGet, apiUrl } from './api';
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('frontend API client', () => {
+  it('builds relative API URLs without a configured base and normalizes path slashes', () => {
+    const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '';
+    expect(apiUrl('api/health')).toBe(`${base}/api/health`);
+    expect(apiUrl('/api/health')).toBe(`${base}/api/health`);
+  });
+
+  it('turns HTTP and network failures into readable API errors', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Not found' }), { status: 404 })));
+    await expect(apiGet('/api/missing')).rejects.toMatchObject({ status: 404, message: 'Not found' });
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+    await expect(apiGet('/api/health')).rejects.toMatchObject({ status: null });
+  });
+
+  it('returns typed JSON payloads on success', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ ok: true })));
+    await expect(apiGet<{ ok: boolean }>('/api/health')).resolves.toEqual({ ok: true });
+  });
+});
