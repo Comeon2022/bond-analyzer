@@ -7,7 +7,7 @@ import { bondSourceStatus } from './bond-source';
 import { fetchJson, fetchText, fetchWorkbook, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseFredSeries, parsePolicyRate } from './sources';
 import { BOI_SECDWH_CSV_URL, BOI_SECDWH_DSD_URL, BOI_SECDWH_FLOW_URL, BOI_SECDWH_PAGE_URL, creditChanges, creditChangeBullet, fetchBoiXml, isCreditSeriesStale, parseBoiCodelist, parseBoiCreditCsv, parseBoiDsdCodelistRefs, resolveOfficialLabel, type CreditMetadata } from './credit';
 
-export interface Env { DB: D1Database; ASSETS: Fetcher; TASE_DATAHUB_API_KEY?: string; TASE_DATAHUB_BASE_URL?: string; ALLOWED_ORIGINS?: string; }
+export interface Env { DB: D1Database; ASSETS: Fetcher; TASE_DATAHUB_API_KEY?: string; TASE_DATAHUB_BASE_URL?: string; ALLOWED_ORIGINS?: string; ADMIN_INGEST_TOKEN?: string; }
 interface DbObservation { observation_date: string; value: number; ingested_at: string; source_timestamp: string | null; revision_number: number; }
 interface DbSignalDefinition { key: string; name_he: string; description_he: string; weight: number; }
 interface DbSetting { key: string; value_json: string; }
@@ -202,6 +202,65 @@ async function ingestAll(db: D1Database): Promise<void> {
   await ingestCreditSpreads(db);
 }
 
+async function runProductionIngestion(db: D1Database): Promise<void> {
+  await ingestAll(db);
+  await refreshBondBenchmarks(db);
+  const overview = await getOverview(db);
+  await persistSignalSnapshots(db, overview.signals);
+  await persistRegimeSnapshot(db, overview);
+}
+
+interface ManualIngestionRunDb { job_key: string; status: string; records_read: number; records_written: number; details_json: string | null; }
+let manualIngestionRunning = false;
+
+async function manualIngestionSources(db: D1Database, startedAt: string) {
+  const result = await db.prepare('SELECT job_key,status,records_read,records_written,details_json FROM ingestion_runs WHERE started_at >= ? ORDER BY started_at').bind(startedAt).all<ManualIngestionRunDb>();
+  const sources: Record<string, Record<string, unknown>> = {};
+  for (const run of result.results) {
+    let details: Record<string, unknown> = {};
+    try { details = JSON.parse(run.details_json ?? '{}') as Record<string, unknown>; } catch { /* Invalid diagnostics are omitted. */ }
+    const key = run.job_key === 'boi_credit_spreads' ? 'boiCreditSpreads' : run.job_key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
+    const source: Record<string, unknown> = { ok: run.status === 'success', rowsRead: run.records_read ?? 0, rowsWritten: run.records_written ?? 0 };
+    if (run.job_key === 'boi_credit_spreads') {
+      source.rowsFetched = typeof details.rowsFetched === 'number' ? details.rowsFetched : null;
+      source.spreadRows = run.records_read ?? 0;
+      source.seriesDiscovered = typeof details.seriesDiscovered === 'number' ? details.seriesDiscovered : 0;
+      source.latestPeriod = typeof details.observationThrough === 'string' ? details.observationThrough : null;
+    }
+    if (run.status !== 'success') source.error = 'source_ingestion_failed';
+    sources[key] = source;
+  }
+  return sources;
+}
+
+async function handleManualIngestion(request: Request, env: Env, runPipeline: (db: D1Database) => Promise<void> = runProductionIngestion): Promise<Response> {
+  if (request.method !== 'POST') return new Response(JSON.stringify({ ok: false, error: 'method_not_allowed' }), { status: 405, headers: { 'content-type': 'application/json; charset=utf-8', Allow: 'POST', 'cache-control': 'no-store' } });
+  const authorization = request.headers.get('Authorization');
+  const match = authorization?.match(/^Bearer ([^\s]+)$/);
+  if (!match) return json({ ok: false, error: 'unauthorized' }, 401);
+  if (!env.ADMIN_INGEST_TOKEN) return json({ ok: false, error: 'admin_ingest_not_configured' }, 503);
+  if (match[1] !== env.ADMIN_INGEST_TOKEN) return json({ ok: false, error: 'forbidden' }, 403);
+  if (manualIngestionRunning) return json({ ok: false, error: 'ingestion_already_running' }, 409);
+
+  manualIngestionRunning = true;
+  const startedAt = nowIso();
+  console.log('Manual ingestion started', 'production_pipeline');
+  try {
+    await runPipeline(env.DB);
+    const finishedAt = nowIso();
+    const sources = await manualIngestionSources(env.DB, startedAt);
+    const ok = Object.values(sources).every((source) => source.ok === true);
+    console.log('Manual ingestion completed', 'production_pipeline', Object.keys(sources).length);
+    return json({ ok, startedAt, finishedAt, sources });
+  } catch (error) {
+    const category = error instanceof Error ? 'pipeline_failed' : 'pipeline_failed';
+    console.error('Manual ingestion failed', category);
+    return json({ ok: false, startedAt, finishedAt: nowIso(), error: category, sources: {} }, 500);
+  } finally {
+    manualIngestionRunning = false;
+  }
+}
+
 async function getBoiCreditMetadata(db: D1Database, rows: Awaited<ReturnType<typeof parseBoiCreditCsv>>, now = nowIso()): Promise<CreditMetadata> {
   const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
   const getCached = async (key: string): Promise<Record<string, string> | null> => {
@@ -292,7 +351,8 @@ async function ingestCreditSpreads(db: D1Database): Promise<void> {
     };
     await batchRun(seriesStatements);
     const written = await batchRun(observationStatements);
-    return { read: rows.length, written, details: { sourceUrl: response.sourceUrl, sourcePage: BOI_SECDWH_PAGE_URL, metadataUrl: BOI_SECDWH_DSD_URL, flowMetadataUrl: BOI_SECDWH_FLOW_URL, payloadHash: response.rawHash, seriesDiscovered: grouped.size, observationThrough: rows.at(-1)?.timePeriod, metadataCodelists: Object.keys(metadata.codelists) } };
+    const rowsFetched = Math.max(0, response.text.split(/\r?\n/).filter((line) => line.trim()).length - 1);
+    return { read: rows.length, written, details: { rowsFetched, sourceUrl: response.sourceUrl, sourcePage: BOI_SECDWH_PAGE_URL, metadataUrl: BOI_SECDWH_DSD_URL, flowMetadataUrl: BOI_SECDWH_FLOW_URL, payloadHash: response.rawHash, seriesDiscovered: grouped.size, observationThrough: rows.at(-1)?.timePeriod, metadataCodelists: Object.keys(metadata.codelists) } };
   });
 }
 
@@ -799,6 +859,7 @@ function addCorsHeaders(response: Response, origin: string | null, env: Env): Re
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === '/api/admin/ingest') return handleManualIngestion(request, env);
     if (url.pathname.startsWith('/api/')) {
       const origin = request.headers.get('Origin');
       if (origin && !isAllowedOrigin(origin, env)) return addCorsHeaders(json({ error: 'Origin not allowed' }, 403), null, env);
@@ -811,14 +872,10 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil((async () => {
       console.log('Scheduled dashboard ingestion started');
-      await ingestAll(env.DB);
-      await refreshBondBenchmarks(env.DB);
-      const overview = await getOverview(env.DB);
-      await persistSignalSnapshots(env.DB, overview.signals);
-      await persistRegimeSnapshot(env.DB, overview);
+      await runProductionIngestion(env.DB);
       console.log('Scheduled dashboard ingestion completed');
     })());
   },
 };
 
-export const __test = { cpiStats };
+export const __test = { cpiStats, handleManualIngestion, runProductionIngestion };

@@ -23,6 +23,30 @@ Local Phase 1A dashboard for Bank of Israel rates and government yield curves, p
 
 The scheduled worker refreshes official sources on weekdays at 16:30 UTC. No macro observations are seeded. The first successful scheduled run imports the official source data. Local D1 and production deployment require a real D1 database; replace the placeholder `database_id` in `wrangler.toml` before remote migration or deployment. Never put Cloudflare credentials in tracked files.
 
+## Operator manual ingestion
+
+`POST /api/admin/ingest` runs the same complete production ingestion pipeline as the scheduled Worker (official macro and credit sources, benchmark refresh, and signal snapshots). It is intended for CLI/PowerShell operators; no frontend control or browser CORS access is provided. The endpoint requires the Cloudflare Worker secret `ADMIN_INGEST_TOKEN` in an `Authorization: Bearer ...` header. It returns sanitized source run statuses and counts; individual source failures are reported without exposing raw errors. Concurrent manual requests receive HTTP 409.
+
+Configure the secret interactively; never put its value in source, documentation, shell history, or a command argument:
+
+```powershell
+npx wrangler secret put ADMIN_INGEST_TOKEN
+```
+
+Then trigger and verify the production run:
+
+```powershell
+$token = Read-Host "Admin ingest token"
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "https://israel-macro-rates-dashboard.karu-lior.workers.dev/api/admin/ingest" `
+  -Headers @{ Authorization = "Bearer $token" }
+Remove-Variable token
+Invoke-RestMethod -Uri "https://israel-macro-rates-dashboard.karu-lior.workers.dev/api/health"
+Invoke-RestMethod -Uri "https://israel-macro-rates-dashboard.karu-lior.workers.dev/api/credit/spreads"
+Invoke-RestMethod -Uri "https://israel-macro-rates-dashboard.karu-lior.workers.dev/api/credit/summary"
+```
+
 ## Phase 1B data and calculations
 
 - BOI policy rate (`GetInterest`), CBS CPI (`id=120010`), BOI nominal and real curves (`shcd08_e.xls`, `shcd07_e.xls`) continue on their official publication cadence.

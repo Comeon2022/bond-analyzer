@@ -159,3 +159,21 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Final source checks: all 32 tests, typecheck, production build, and Wrangler dry-run passed after implementation. No paid TASE feed, public TASE page scraping, seeded values, or inferred BOI labels were used. Top-level `secdwh-24.csv`, `secdwh-test.csv`, and `usdils-test.csv` were present as local working files and were not included in the implementation commit.
 - Repository identity verified before remote actions: `C:\Users\Liorkale\Documents\Claude\Projects\StockAnalitics\bond dashboard`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
 - Implementation commit: `5e4cda8cb000a3f7613f54b7056ba5e8b4dcf390` (`Implement BOI free credit spread ingestion`); this commit was pushed to `origin/main`.
+
+## Phase 1E secure manual ingestion — 2026-10-02
+
+### Implementation
+
+- Added operator-only `POST /api/admin/ingest`, which calls the same `runProductionIngestion` function used by the scheduled Worker. This covers the existing full source refresh, credit import, benchmark refresh, and derived snapshots; no duplicate ingestion path or frontend control was added.
+- Authentication uses only the Worker binding `ADMIN_INGEST_TOKEN` and `Authorization: Bearer <token>`. Missing/malformed authorization returns 401, an incorrect configured token returns 403, and a missing Worker secret returns 503 before ingestion begins. Other methods return 405 with `Allow: POST`; query-string tokens are ignored. The route bypasses public CORS handling, so existing public API CORS behavior is unchanged.
+- Added an isolate-level concurrent manual-run guard (409), sanitized per-source result reporting, and failure responses that omit raw exceptions, SQL, environment values, and credentials. Credit result fields report bulk rows fetched, SPR rows, discovered series, and latest period from runtime D1 ingestion-run details.
+- Added endpoint tests covering methods, auth, query token rejection, absent secret, successful callback invocation, sanitized failure/logging, concurrency, and CORS isolation. Documented the interactive Cloudflare secret setup and PowerShell trigger/verification commands in `README.md`; no secret value is documented or committed.
+
+### Verification and deployment
+
+- Cloudflare `wrangler secret list` returned no configured secrets, so `ADMIN_INGEST_TOKEN` was not configured. No authenticated request or live ingestion was attempted. The deployed endpoint returns 503 for a well-formed bearer request until the secret is set.
+- `npm run typecheck`: passed. `npm test`: passed (41 tests across 8 files). `npm run build`: passed. `npx wrangler deploy --dry-run`: passed; Wrangler resolved the configured `bond-analyzer-db` D1 binding and Worker assets.
+- Worker deployment and post-deploy API checks: pending.
+- Manual production ingestion: not run. Production series count and latest observation period remain as previously reported under Phase 1D (no persisted production BOI rows verified yet).
+- Required operator action: run `npx wrangler secret put ADMIN_INGEST_TOKEN`, then use the PowerShell invocation in `README.md`; verify `/api/health`, `/api/credit/spreads`, and `/api/credit/summary` afterward.
+- Phase 1E commit: pending.
