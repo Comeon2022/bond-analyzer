@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ApiError, getCreditSpreads, getCreditSummary } from './lib/api';
+import { ApiError, getCreditSpreads } from './lib/api';
 import type { CreditSourceStatus, CreditSpreadSeries, CreditSummaryResponse } from './lib/api-types';
 
 function changeText(value: number | null): string {
@@ -15,9 +15,8 @@ function statusText(status: CreditSourceStatus['status']): string {
   return status === 'healthy' ? 'עדכני' : status === 'stale' ? 'נדרשת בדיקה' : status === 'error' ? 'העדכון נכשל' : 'ממתין לנתונים';
 }
 
-export default function CreditPanel() {
+export default function CreditPanel({ summary, summaryLoading }: { summary: CreditSummaryResponse | null; summaryLoading: boolean }) {
   const [series, setSeries] = useState<CreditSpreadSeries[]>([]);
-  const [summary, setSummary] = useState<CreditSummaryResponse | null>(null);
   const [sourceStatus, setSourceStatus] = useState<CreditSourceStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,27 +25,22 @@ export default function CreditPanel() {
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([getCreditSpreads(), getCreditSummary()]).then(([spreadResult, summaryResult]) => {
+    getCreditSpreads().then((spreadResponse) => {
       if (!active) return;
-      if (spreadResult.status === 'fulfilled') {
-        setSeries(spreadResult.value.series);
-        setSourceStatus(spreadResult.value.sourceStatus);
-        setSelectedCode((current) => current || spreadResult.value.series[0]?.seriesCode || '');
-      } else {
-        const reason = spreadResult.reason;
-        setError(reason instanceof ApiError || reason instanceof Error ? reason.message : 'לא ניתן לטעון נתוני אשראי מבנק ישראל.');
-      }
-      if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value);
-      else if (spreadResult.status === 'fulfilled') {
-        const reason = summaryResult.reason;
-        setError(reason instanceof Error ? reason.message : 'לא ניתן לטעון את סיכום נתוני האשראי.');
-      }
+      setSeries(spreadResponse.series);
+      setSourceStatus(spreadResponse.sourceStatus);
+      setSelectedCode((current) => current || spreadResponse.series[0]?.seriesCode || '');
+      setLoading(false);
+    }).catch((reason: unknown) => {
+      if (!active) return;
+      setError(reason instanceof ApiError || reason instanceof Error ? reason.message : 'לא ניתן לטעון נתוני אשראי מבנק ישראל.');
       setLoading(false);
     });
     return () => { active = false; };
   }, []);
 
   const selected = series.find((row) => row.seriesCode === selectedCode) ?? series[0] ?? null;
+  const displayedSourceStatus = summary?.sourceStatus ?? sourceStatus;
   const chartData = useMemo(() => {
     if (!selected) return [];
     const points = range === '6M' ? selected.history.slice(-6) : range === '1Y' ? selected.history.slice(-12) : selected.history;
@@ -56,16 +50,16 @@ export default function CreditPanel() {
 
   return <section className="panel credit-panel" aria-labelledby="credit-title">
     <div className="panel-title"><div><span className="eyebrow">נתוני אשראי ממקור ציבורי</span><h2 id="credit-title">שוק האשראי הקונצרני — נתוני בנק ישראל</h2></div><span className="free-source-badge" title="הנתון מתקבל ממקור ציבורי רשמי ואינו דורש מנוי לנתוני בורסה.">מקור רשמי חינמי</span></div>
-    {sourceStatus && <div className={`credit-source-status credit-${sourceStatus.status}`} role="status"><span>{statusText(sourceStatus.status)}</span><span>{sourceStatus.seriesCount} סדרות · {sourceStatus.observationCount} תצפיות · אחרון: {periodText(sourceStatus.latestObservationPeriod)}</span><a href={sourceStatus.sourcePage} target="_blank" rel="noreferrer">מקור BOI</a></div>}
+    {displayedSourceStatus && <div className={`credit-source-status credit-${displayedSourceStatus.status}`} role="status"><span>{statusText(displayedSourceStatus.status)}</span><span>{displayedSourceStatus.seriesCount} סדרות · {displayedSourceStatus.observationCount} תצפיות · אחרון: {periodText(displayedSourceStatus.latestObservationPeriod)}</span><a href={displayedSourceStatus.sourcePage} target="_blank" rel="noreferrer">מקור BOI</a></div>}
     {error && <div className="error-banner" role="alert"><span>!</span><div><b>טעינת נתוני האשראי נכשלה</b><p>{error}</p>{sourceStatus?.lastError && <small>עדכון מקור אחרון: {sourceStatus.lastError}</small>}</div></div>}
     {loading && <p className="credit-message" role="status">טוען סדרות מרווח רשמיות…</p>}
     {!loading && !error && series.length === 0 && <div className="credit-message" role="status"><b>עדיין לא נקלטו סדרות מרווח.</b><span>לא נוצרו נתוני שוק מקומיים; ה־Worker יציג כאן תצפיות לאחר קליטת נתוני BOI.</span></div>}
     {series.length > 0 && <>
       <div className="credit-summary-grid">
-        <div><small>תקופה משותפת אחרונה</small><b>{periodText(summary?.latestCommonObservationPeriod ?? null)}</b></div>
+        <div><small>תקופה משותפת אחרונה</small><b>{summaryLoading ? 'טוען' : periodText(summary?.latestCommonObservationPeriod ?? null)}</b></div>
         <div><small>המרווח הרחב ביותר</small><b>{summary?.widestCurrentSpread ? `${summary.widestCurrentSpread.value.toLocaleString('he-IL', { maximumFractionDigits: 3 })} · ${summary.widestCurrentSpread.label}` : 'אין נתון'}</b></div>
         <div><small>המרווח הצר ביותר</small><b>{summary?.narrowestCurrentSpread ? `${summary.narrowestCurrentSpread.value.toLocaleString('he-IL', { maximumFractionDigits: 3 })} · ${summary.narrowestCurrentSpread.label}` : 'אין נתון'}</b></div>
-        <div><small>כיסוי מטא־דאטה</small><b>{summary ? `${summary.coverage.metadataResolvedSeries}/${series.length} סדרות` : 'טוען'}</b></div>
+        <div><small>כיסוי מטא־דאטה</small><b>{summaryLoading ? 'טוען' : summary ? `${summary.coverage.metadataResolvedSeries}/${series.length} סדרות` : 'לא זמין'}</b></div>
       </div>
       <div className="credit-series-table-wrap"><table className="credit-series-table"><thead><tr><th>סדרה / קטגוריה</th><th>מרווח אחרון</th><th>חודש תצפית</th><th>שינוי חודשי</th><th>שינוי 3 חודשים</th><th>הצמדה</th><th>דירוג</th><th>ענף</th></tr></thead><tbody>{series.map((row) => <tr key={row.seriesCode} className={row.seriesCode === selectedCode ? 'selected' : ''} onClick={() => setSelectedCode(row.seriesCode)}><td><b>{row.compCategoryLabel || row.label}</b><small>{row.seriesCode} · {row.compNameLabel}</small></td><td>{row.latest ? `${row.latest.value.toLocaleString('he-IL', { maximumFractionDigits: 3 })} ${row.unitMeasureLabel === 'Percent' || row.unitMeasure === 'PT' ? '%' : row.unitMeasureLabel ?? ''}` : 'אין תצפית'}</td><td>{periodText(row.latestObservationPeriod)}</td><td>{changeText(row.change1m)}</td><td>{changeText(row.change3m)}</td><td>{row.indexationTypeLabel}</td><td>{row.secRankGroupLabel}</td><td>{row.issuerSectorLabel}</td></tr>)}</tbody></table></div>
       {unresolved && <p className="metadata-warning" role="status">חלק מקודי הסדרה לא זוהו במטא־דאטה הרשמי של בנק ישראל. הקודים מוצגים ללא ניחוש תוויות.</p>}

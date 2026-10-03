@@ -7,12 +7,29 @@ export interface OutlookSummary {
   conclusionBullets: string[];
   riskTriggerBullets: string[];
   confidenceLabel: 'ביטחון נמוך' | 'ביטחון בינוני' | 'ביטחון גבוה יחסית';
+  creditStatus: 'תומך' | 'מעורב' | 'זהיר' | 'לא זמין';
+  creditDetail: string;
 }
+
+export interface CreditOutlookContext {
+  available: boolean;
+  stale: boolean;
+  latestPeriod: string | null;
+  seriesCount: number;
+  largest3mWideningBp: number | null;
+  largest3mNarrowingBp: number | null;
+}
+
+export const CREDIT_OUTLOOK_THRESHOLDS = {
+  mildWideningBp: 10,
+  materialWideningBp: 25,
+  materialNarrowingBp: -25,
+} as const;
 
 export interface OutlookInput {
   regime: { status: SignalStatus; score: number | null; coveragePct: number };
   signals: Pick<Signal, 'key' | 'status'>[];
-  creditContext?: { seriesCount: number; largest3mWidening: number | null };
+  creditContext?: CreditOutlookContext | null;
 }
 
 const FORBIDDEN_TEXT = /לקנות|למכור|בוודאות|בהכרח|בטוח/;
@@ -63,11 +80,64 @@ function longEndConclusion(real: SignalStatus, nominal: SignalStatus): string {
   return 'הנתונים הזמינים בקצה הארוך אינם מצביעים על כיוון אחיד.';
 }
 
+function interpretCredit(context: CreditOutlookContext | null | undefined): { status: OutlookSummary['creditStatus']; detail: string; conclusion: string | null; trigger: string | null; materiallyWidening: boolean } {
+  if (!context?.available || context.seriesCount <= 0) return { status: 'לא זמין', detail: 'אין כרגע נתוני אשראי זמינים.', conclusion: null, trigger: null, materiallyWidening: false };
+  if (context.stale || !context.latestPeriod) return {
+    status: 'לא זמין',
+    detail: 'נתוני האשראי זמינים אך אינם עדכניים מספיק כדי להשפיע על התחזית הנוכחית.',
+    conclusion: null,
+    trigger: null,
+    materiallyWidening: false,
+  };
+
+  const widening = context.largest3mWideningBp;
+  const narrowing = context.largest3mNarrowingBp;
+  const materiallyWidening = widening !== null && widening >= CREDIT_OUTLOOK_THRESHOLDS.materialWideningBp;
+  if (materiallyWidening) return {
+    status: 'זהיר',
+    detail: `מבוסס על ${context.seriesCount} סדרות BOI, עד ${context.latestPeriod}`,
+    conclusion: 'מרווחי האשראי מתרחבים ומוסיפים זהירות לתמונה הכוללת.',
+    trigger: 'התרחבות מחודשת במרווחי האשראי.',
+    materiallyWidening: true,
+  };
+
+  if (widening === null && narrowing === null) return {
+    status: 'מעורב',
+    detail: `מבוסס על ${context.seriesCount} סדרות BOI, עד ${context.latestPeriod}; אין שינוי תלת־חודשי מלא לכל הסדרות.`,
+    conclusion: 'שוק האשראי מציג תמונה מעורבת: אין די השוואות תלת־חודשיות מלאות לקביעת כיוון רחב.',
+    trigger: null,
+    materiallyWidening: false,
+  };
+
+  const mildlyWidening = widening !== null && widening >= CREDIT_OUTLOOK_THRESHOLDS.mildWideningBp;
+  const alsoNarrowing = narrowing !== null && narrowing <= CREDIT_OUTLOOK_THRESHOLDS.materialNarrowingBp;
+  if (mildlyWidening || (alsoNarrowing && widening !== null && widening > 0)) return {
+    status: 'מעורב',
+    detail: `מבוסס על ${context.seriesCount} סדרות BOI, עד ${context.latestPeriod}`,
+    conclusion: 'שוק האשראי מציג תמונה מעורבת: אין לחץ רוחבי, אך חלק מהמרווחים עדיין דורשים מעקב.',
+    trigger: mildlyWidening ? 'התרחבות מחודשת במרווחי האשראי.' : null,
+    materiallyWidening: false,
+  };
+
+  return {
+    status: 'תומך',
+    detail: `מבוסס על ${context.seriesCount} סדרות BOI, עד ${context.latestPeriod}`,
+    conclusion: 'שוק האשראי אינו מצביע כרגע על החרפה רוחבית בתנאי המימון.',
+    trigger: null,
+    materiallyWidening: false,
+  };
+}
+
+function lowerConfidence(label: OutlookSummary['confidenceLabel']): OutlookSummary['confidenceLabel'] {
+  return label === 'ביטחון גבוה יחסית' ? 'ביטחון בינוני' : label === 'ביטחון בינוני' ? 'ביטחון נמוך' : 'ביטחון נמוך';
+}
+
 export function buildOutlookSummary(input: OutlookInput): OutlookSummary {
   const macroCounts = countStatuses(input.signals, ['policy_rate', 'cpi_inflation', 'inflation_expectations']);
   const realTrend = input.signals.find((signal) => signal.key === 'long_real_yield')?.status ?? 'unknown';
   const nominalTrend = input.signals.find((signal) => signal.key === 'long_yield_momentum')?.status ?? 'unknown';
   const risk = input.signals.find((signal) => signal.key === 'israel_risk_proxy')?.status ?? 'unknown';
+  const credit = interpretCredit(input.creditContext);
   const currentState = input.regime.status === 'unknown'
     ? 'אין די איתותים מאומתים לקביעת תמונת מצב עדכנית.'
     : `סביבת שוק האג״ח כרגע ${input.regime.status === 'green' ? 'חיובית מתונה' : input.regime.status === 'yellow' ? 'מעורבת' : 'זהירה'}.`;
@@ -89,9 +159,7 @@ export function buildOutlookSummary(input: OutlookInput): OutlookSummary {
           : 'אין די רכיבי מקור מאומתים להערכת תנאי הסיכון בישראל.',
   ];
   if (input.creditContext && input.creditContext.seriesCount > 0) {
-    conclusionBullets.push(input.creditContext.largest3mWidening !== null && input.creditContext.largest3mWidening > 0
-      ? 'בסדרת מרווח אשראי זמינה אחת או יותר נרשמה התרחבות בשלושת החודשים האחרונים.'
-      : 'נתוני מרווחי אשראי זמינים; הם מתארים סדרות מצרפיות ואינם תחליף לנתוני איגרות בודדות.');
+    if (credit.conclusion) conclusionBullets.push(credit.conclusion);
   }
 
   const riskTriggerBullets = [
@@ -103,8 +171,11 @@ export function buildOutlookSummary(input: OutlookInput): OutlookSummary {
       : 'שינוי כיוון ועלייה בתשואות הארוכות בישראל או בארצות הברית.',
     risk === 'red' ? 'המשך הרעה בפרוקסי תנאי הסיכון בישראל או היחלשות השקל.' : 'הרעה בפרוקסי תנאי הסיכון בישראל, לרבות היחלשות השקל.',
   ];
+  if (credit.trigger) riskTriggerBullets.push(credit.trigger);
 
-  const text = [currentState, baseCaseText, ...conclusionBullets, ...riskTriggerBullets, overallLabelFor(input.regime.status)];
+  let confidenceLabel = confidenceFor(input);
+  if (input.regime.status === 'green' && !input.creditContext?.stale && credit.materiallyWidening) confidenceLabel = lowerConfidence(confidenceLabel);
+  const text = [currentState, baseCaseText, ...conclusionBullets, ...riskTriggerBullets, overallLabelFor(input.regime.status), credit.detail];
   if (text.some((item) => FORBIDDEN_TEXT.test(item))) throw new Error('Outlook text contains prohibited recommendation or certainty language');
   return {
     overallLabel: overallLabelFor(input.regime.status),
@@ -112,7 +183,9 @@ export function buildOutlookSummary(input: OutlookInput): OutlookSummary {
     baseCaseText,
     conclusionBullets,
     riskTriggerBullets,
-    confidenceLabel: confidenceFor(input),
+    confidenceLabel,
+    creditStatus: credit.status,
+    creditDetail: credit.detail,
   };
 }
 

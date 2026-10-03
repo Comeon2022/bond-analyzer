@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Scatter, ScatterChart,
 } from 'recharts';
@@ -6,8 +6,10 @@ import type { MacroCard, OverviewResponse, SignalStatus, SourceStatus, YieldPoin
 import type { BondMarketRecord } from '../shared/bonds';
 import { matchGovernmentBenchmark } from '../shared/bonds';
 import { buildOutlookSummary, regimeLabel } from '../shared/outlook';
-import { ApiError, apiGet, getApiHealth, getOverview } from './lib/api';
-import type { BondBenchmarkResponse, BondDetailResponse, BondHistoryResponse } from './lib/api-types';
+import { ApiError, apiGet, getApiHealth, getCreditSummary, getOverview } from './lib/api';
+import type { BondBenchmarkResponse, BondDetailResponse, BondHistoryResponse, CreditSummaryResponse } from './lib/api-types';
+import { loadMacroAndCreditIndependently } from './lib/dashboard-loader';
+import { normalizeCreditOutlookContext } from './lib/credit-outlook';
 import CreditPanel from './CreditPanel';
 
 
@@ -377,16 +379,31 @@ function BondScreener({ data, governmentCurves }: { data: OverviewResponse['bond
 
 function App() {
   const [data, setData] = useState<OverviewResponse | null>(null);
+  const [creditSummary, setCreditSummary] = useState<CreditSummaryResponse | null>(null);
+  const [creditContext, setCreditContext] = useState<ReturnType<typeof normalizeCreditOutlookContext>>(null);
+  const [creditLoading, setCreditLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<MacroCard | null>(null);
   const [updated, setUpdated] = useState<Date | null>(null);
   const [apiState, setApiState] = useState<'checking' | 'connected' | 'no-data' | 'worker-unavailable' | 'database-unavailable' | 'api-error'>('checking');
+  const requestSequence = useRef(0);
 
   async function loadData() {
+    const requestId = ++requestSequence.current;
     setLoading(true);
     setApiState('checking');
-    const [healthResult, overviewResult] = await Promise.allSettled([getApiHealth(), getOverview()]);
+    setCreditLoading(true);
+    setCreditSummary(null);
+    setCreditContext(null);
+    const tasks = loadMacroAndCreditIndependently(getOverview, getCreditSummary, (summary) => {
+      if (requestSequence.current !== requestId) return;
+      setCreditSummary(summary);
+      setCreditContext(normalizeCreditOutlookContext(summary));
+      setCreditLoading(false);
+    });
+    const [healthResult, overviewResult] = await Promise.allSettled([getApiHealth(), tasks.macro]);
+    if (requestSequence.current !== requestId) return;
     if (overviewResult.status === 'fulfilled') {
       const next = overviewResult.value;
       setData(next);
@@ -411,7 +428,7 @@ function App() {
 
   useEffect(() => { void loadData(); }, []);
   const signalByKey = useMemo(() => new Map(data?.signals.map((signal) => [signal.key, signal]) ?? []), [data?.signals]);
-  const outlook = useMemo(() => data ? buildOutlookSummary({ regime: data.regime, signals: data.signals }) : null, [data]);
+  const outlook = useMemo(() => data ? buildOutlookSummary({ regime: data.regime, signals: data.signals, creditContext }) : null, [data, creditContext]);
 
 
   return <main className="app-shell">
@@ -430,6 +447,7 @@ function App() {
             <h2 id="regime-title">{outlook?.overallLabel ?? 'מתחבר לנתונים'}</h2>
             <div className="current-state"><span>מצב נוכחי</span><p>{outlook?.currentState ?? 'ממתין לאיתותים מאומתים.'}</p></div>
             <div className="base-case"><span>תחזית קדימה — תרחיש בסיס</span><p>{outlook?.baseCaseText ?? 'התרחיש יופיע לאחר טעינת איתותי המקור.'}</p></div>
+            <div className={`credit-outlook credit-outlook-${outlook?.creditStatus === 'זהיר' ? 'cautious' : outlook?.creditStatus === 'מעורב' ? 'mixed' : outlook?.creditStatus === 'תומך' ? 'supportive' : 'unavailable'}`} role="status"><b>אשראי קונצרני: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</b><span>{creditLoading ? 'טוען סיכום נתוני אשראי מבנק ישראל.' : outlook?.creditDetail ?? 'אין כרגע נתוני אשראי זמינים.'}</span></div>
             <div className="outlook-lists">
               <div><h3>מסקנות מהמצב הקיים</h3><ul>{(outlook?.conclusionBullets ?? ['ממתין לנתוני מקור.']).map((bullet, index) => <li key={`conclusion-${index}`}>{bullet}</li>)}</ul></div>
               <div><h3>מה יכול לשנות את התמונה</h3><ul>{(outlook?.riskTriggerBullets ?? ['שינוי באינפלציה ובציפיות לה.','שינוי בתשואות הארוכות.','שינוי בתנאי הסיכון בישראל.']).map((bullet, index) => <li key={`trigger-${index}`}>{bullet}</li>)}</ul></div>
@@ -459,7 +477,7 @@ function App() {
         <p>{data?.markets.riskProxy.label}: {data?.markets.riskProxy.components.map((component) => `${seriesLabel(component.key)} ${component.value === null ? 'אין נתון' : numberLabel(component.value, 2)} ${marketUnitLabel(component.unit)} (${REGIME_STATUS_HE[component.status]}, ${component.sourceObservationDate ?? 'ללא תאריך'})`).join(' · ')}</p>
       </section>
       <section className="panel"><div className="panel-title"><div><span className="eyebrow">פרסום בנק ישראל</span><h2>ציפיות אינפלציה</h2></div><span>{dateLabel(data?.expectations.publicationDate)}</span></div><div className="inflation-stats">{data?.expectations.items.map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)}</span><b>{series.value === null ? 'אין עדיין תצפית' : `${numberLabel(series.value)}%`}</b><small>{dateLabel(series.observationDate)} · {series.source}</small><small>מצב מקור: {marketStatusLabel(series.status)}</small></div>)}</div></section>
-      <CreditPanel />
+      <CreditPanel summary={creditSummary} summaryLoading={creditLoading} />
       {data && <BondScreener data={data.bondScreener} governmentCurves={data.curves} />}
       <section className="two-column" id="curves"><YieldCurvePanel real={data?.curves.real ?? []} nominal={data?.curves.nominal ?? []} /><InflationPanel data={data?.inflation ?? { latestIndex: null, mom: null, yoy: null, previousYoy: null, observationDate: null, targetLow: 1, targetHigh: 3, observations: [] }} /></section>
 

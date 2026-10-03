@@ -241,3 +241,9 @@ h1, h2, h3, p { margin-top: 0; }
   .regime-rail .confidence-stat { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 8px; }
   .regime-rail .confidence-meter { grid-column: 1 / -1; }
 }
+.credit-outlook { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 9px; margin-top: 12px; padding: 8px 10px; border: 1px solid #ffffff24; border-radius: 7px; background: #ffffff0c; color: #d6e5ee; font-size: 10px; line-height: 1.5; }
+.credit-outlook b { color: #f4f8fa; font-size: 10px; font-weight: 650; }
+.credit-outlook span { color: #b9cede; }
+.credit-outlook-cautious { border-color: #efb5a766; background: #b04e3c22; }
+.credit-outlook-mixed { border-color: #e3c37b55; }
+.credit-outlook-supportive { border-color: #9ed3bc55; }

@@ -197,3 +197,25 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - This phase changes only shared interpretation code and the frontend; no Worker/API deployment is required. No GitHub Actions deployment workflow or direct Pages deployment command is present in the repository. The changes are being published to the dashboard's verified `main` branch; Cloudflare Pages production rollout was not independently verified here.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
 - Remaining UX follow-up: the credit summary endpoint is separate from the macro overview; pass its aggregate summary into the outlook only if the UI later adopts an explicit shared loading/error state for that source.
+
+## Phase 1G credit conditions in the deterministic outlook — 2026-10-03
+
+### Architecture and implementation
+
+- Chose frontend loading architecture A. `src/App.tsx` starts `/api/credit/summary` through the shared dashboard loader independently from the macro overview and health requests. Macro rendering does not await the credit request; a credit failure is converted to `null` without forwarding its network error into the executive summary.
+- The summary is reused by `src/CreditPanel.tsx`, removing its duplicate `/api/credit/summary` request. Detailed spread series, history, and chart remain in the separate credit section.
+- Added complete runtime shape validation for summary fields in `src/lib/api.ts`. `src/lib/credit-outlook.ts` normalizes the response into availability, freshness, latest common period, series count, and aggregate 3M widening/narrowing values; the deterministic engine does not consume the raw API response or issuer names.
+- Extended `shared/outlook.ts` to emit at most one aggregate credit conclusion and at most one credit-related trigger. Fresh conditions are classified with named defaults: mild 3M widening `+10 bp`, material widening `+25 bp`, material narrowing `-25 bp`. Stale/unavailable data is shown as `לא זמין`, adds no evidence or trigger, and does not change confidence. Fresh material widening reduces confidence by one level only when the macro regime is supportive; stable/narrowing data leaves the macro confidence unchanged.
+- Added the compact dynamic `אשראי קונצרני` line and period/series context to the top card. No production spread values or series identities are hard-coded. The card uses aggregate market data only and contains no recommendation language.
+- Files changed: `src/App.tsx`, `src/CreditPanel.tsx`, `src/lib/api.ts`, new `src/lib/dashboard-loader.ts`, new `src/lib/credit-outlook.ts`, their tests, `shared/outlook.ts`, `shared/outlook.test.ts`, and this handoff.
+
+### Verification and deployment
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (57 tests across 11 files), including credit classifications, stale/unavailable handling, confidence adjustment, independent load failure behavior, API validation, and one-credit-item caps.
+- `npm run build`: passed.
+- `npx wrangler deploy --dry-run`: passed; this is frontend/shared logic only, so no Worker deployment was required.
+- Live production `GET /api/credit/summary` returned 3 series, latest common period `2026-09`, status `healthy`, `stale: false`. Runtime values are consumed from the API; none are stored in code.
+- Pages production rollout: pending verification after push.
+- Commit SHA: pending.
+- Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.

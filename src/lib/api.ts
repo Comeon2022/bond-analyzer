@@ -90,8 +90,30 @@ export async function getCreditSpreads(): Promise<CreditSpreadsResponse> {
 
 export async function getCreditSummary(): Promise<CreditSummaryResponse> {
   const payload = await apiGet<unknown>('/api/credit/summary');
-  if (!isRecord(payload) || typeof payload.seriesCount !== 'number' || !isRecord(payload.coverage)
-    || !isRecord(payload.sourceStatus) || !isRecord(payload.changes) || !Array.isArray(payload.changes.bullets)) {
+  const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+  const isNullableNumber = (value: unknown): value is number | null => value === null || isNumber(value);
+  const isNullableString = (value: unknown): value is string | null => value === null || typeof value === 'string';
+  const isPeriodSummary = (value: unknown): boolean => value === null || (isRecord(value)
+    && typeof value.seriesCode === 'string' && typeof value.label === 'string'
+    && isNumber(value.value) && typeof value.timePeriod === 'string');
+  const isChangeSummary = (value: unknown): boolean => value === null || (isRecord(value)
+    && typeof value.seriesCode === 'string' && typeof value.label === 'string' && isNullableNumber(value.changeBp));
+  const source = isRecord(payload) && isRecord(payload.sourceStatus) ? payload.sourceStatus : null;
+  const coverage = isRecord(payload) && isRecord(payload.coverage) ? payload.coverage : null;
+  const changes = isRecord(payload) && isRecord(payload.changes) ? payload.changes : null;
+  const valid = isRecord(payload)
+    && isNumber(payload.seriesCount) && Number.isInteger(payload.seriesCount) && payload.seriesCount >= 0
+    && isNullableString(payload.latestCommonObservationPeriod)
+    && isPeriodSummary(payload.widestCurrentSpread) && isPeriodSummary(payload.narrowestCurrentSpread)
+    && isChangeSummary(payload.largest3mWidening) && isChangeSummary(payload.largest3mNarrowing)
+    && !!coverage && isNumber(coverage.seriesWithData) && isNumber(coverage.seriesWithoutData)
+    && isNumber(coverage.metadataResolvedSeries) && isNumber(coverage.metadataUnresolvedSeries)
+    && !!source && typeof source.name === 'string' && typeof source.sourceUrl === 'string' && typeof source.sourcePage === 'string'
+    && isNullableString(source.lastSuccessAt) && isNullableString(source.lastErrorAt) && isNullableString(source.lastError)
+    && isNullableString(source.latestObservationPeriod) && isNumber(source.observationCount) && isNumber(source.seriesCount)
+    && typeof source.stale === 'boolean' && ['pending', 'stale', 'error', 'healthy'].includes(String(source.status))
+    && !!changes && Array.isArray(changes.bullets) && changes.bullets.every((bullet: unknown) => typeof bullet === 'string');
+  if (!valid) {
     throw new ApiError('תגובת סיכום מרווחי האשראי אינה תקינה.', null, 'schema');
   }
   return payload as unknown as CreditSummaryResponse;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOutlookSummary, type OutlookInput } from './outlook';
+import { buildOutlookSummary, CREDIT_OUTLOOK_THRESHOLDS, type CreditOutlookContext, type OutlookInput } from './outlook';
 
 function input(statuses: Record<string, 'green' | 'yellow' | 'red' | 'unknown'>, coveragePct = 100, regimeStatus: OutlookInput['regime']['status'] = 'green'): OutlookInput {
   return {
@@ -12,6 +12,10 @@ const positive = {
   policy_rate: 'green', cpi_inflation: 'green', inflation_expectations: 'green',
   long_real_yield: 'yellow', long_yield_momentum: 'yellow', israel_risk_proxy: 'green',
 } as const;
+
+function freshCredit(widening: number | null, narrowing: number | null): CreditOutlookContext {
+  return { available: true, stale: false, latestPeriod: '2026-09', seriesCount: 3, largest3mWideningBp: widening, largest3mNarrowingBp: narrowing };
+}
 
 describe('deterministic Hebrew outlook interpretation', () => {
   it('builds a positive-moderate base case from aligned supportive signals', () => {
@@ -61,10 +65,59 @@ describe('deterministic Hebrew outlook interpretation', () => {
     expect(buildOutlookSummary(input({ policy_rate: 'green', cpi_inflation: 'yellow', inflation_expectations: 'yellow', long_real_yield: 'yellow', long_yield_momentum: 'yellow', israel_risk_proxy: 'yellow' }, 95, 'yellow')).confidenceLabel).toBe('ביטחון בינוני');
   });
 
-  it('adds an optional credit spread conclusion only when summary data exists', () => {
-    const outlook = buildOutlookSummary({ ...input(positive), creditContext: { seriesCount: 4, largest3mWidening: 12 } });
-    expect(outlook.conclusionBullets).toHaveLength(4);
-    expect(outlook.conclusionBullets[3]).toContain('נרשמה התרחבות');
+  it('integrates supportive, mixed, and deteriorating fresh credit conditions', () => {
+    const supportive = buildOutlookSummary({ ...input(positive), creditContext: freshCredit(-4, -28) });
+    const mixed = buildOutlookSummary({ ...input(positive), creditContext: freshCredit(CREDIT_OUTLOOK_THRESHOLDS.mildWideningBp, -28) });
+    const deteriorating = buildOutlookSummary({ ...input(positive), creditContext: freshCredit(CREDIT_OUTLOOK_THRESHOLDS.materialWideningBp, -30) });
+    expect(supportive.creditStatus).toBe('תומך');
+    expect(supportive.conclusionBullets.filter((bullet) => bullet.includes('שוק האשראי')).length).toBe(1);
+    expect(mixed.creditStatus).toBe('מעורב');
+    expect(mixed.conclusionBullets.filter((bullet) => bullet.includes('שוק האשראי')).length).toBe(1);
+    expect(deteriorating.creditStatus).toBe('זהיר');
+    expect(deteriorating.conclusionBullets.filter((bullet) => bullet.includes('מרווחי האשראי')).length).toBe(1);
+    expect(deteriorating.riskTriggerBullets.filter((bullet) => bullet.includes('מרווחי האשראי')).length).toBe(1);
+    expect(deteriorating.confidenceLabel).toBe('ביטחון בינוני');
+  });
+
+  it('does not use stale credit as evidence or change confidence', () => {
+    const stale = buildOutlookSummary({ ...input(positive), creditContext: { ...freshCredit(40, null), stale: true } });
+    const unavailable = buildOutlookSummary({ ...input(positive), creditContext: null });
+    const macroOnly = buildOutlookSummary(input(positive));
+    expect(stale.creditStatus).toBe('לא זמין');
+    expect(stale.creditDetail).toContain('אינם עדכניים מספיק');
+    expect(stale.conclusionBullets).toHaveLength(3);
+    expect(stale.riskTriggerBullets).toHaveLength(3);
+    expect(stale.confidenceLabel).toBe('ביטחון גבוה יחסית');
+    expect(unavailable.creditStatus).toBe('לא זמין');
+    expect(unavailable.conclusionBullets).toHaveLength(3);
+    expect(unavailable.confidenceLabel).toBe(macroOnly.confidenceLabel);
+    expect(unavailable.overallLabel).toBe(macroOnly.overallLabel);
+    expect(unavailable.currentState).toBe(macroOnly.currentState);
+    expect(unavailable.baseCaseText).toBe(macroOnly.baseCaseText);
+    expect(unavailable.riskTriggerBullets).toEqual(macroOnly.riskTriggerBullets);
+  });
+
+  it('lowers confidence one step for fresh material widening only when macro is supportive', () => {
+    const high = buildOutlookSummary({ ...input(positive), creditContext: freshCredit(30, null) });
+    const macroOnly = buildOutlookSummary(input(positive));
+    const mediumMacro = buildOutlookSummary({ ...input({ ...positive, israel_risk_proxy: 'yellow' }, 65, 'green'), creditContext: freshCredit(30, null) });
+    expect(high.confidenceLabel).toBe('ביטחון בינוני');
+    expect(high.confidenceLabel).not.toBe(macroOnly.confidenceLabel);
+    expect(mediumMacro.confidenceLabel).toBe('ביטחון נמוך');
+    const macroMixed = buildOutlookSummary({ ...input(positive, 82, 'yellow'), creditContext: freshCredit(30, null) });
+    expect(macroMixed.confidenceLabel).toBe(buildOutlookSummary(input(positive, 82, 'yellow')).confidenceLabel);
+  });
+
+  it('limits credit interpretation to one conclusion and one risk trigger', () => {
+    const outlook = buildOutlookSummary({ ...input(positive), creditContext: freshCredit(32, -26) });
+    expect(outlook.conclusionBullets.filter((bullet) => /אשראי|מרווחי האשראי/.test(bullet))).toHaveLength(1);
+    expect(outlook.riskTriggerBullets.filter((bullet) => /אשראי|מרווחי האשראי/.test(bullet))).toHaveLength(1);
+  });
+
+  it('leaves credit unavailable when no fresh common observations exist', () => {
+    const noSeries = buildOutlookSummary({ ...input(positive), creditContext: { available: false, stale: false, latestPeriod: null, seriesCount: 0, largest3mWideningBp: null, largest3mNarrowingBp: null } });
+    expect(noSeries.creditStatus).toBe('לא זמין');
+    expect(noSeries.conclusionBullets).toHaveLength(3);
   });
 
   it('uses only the approved Hebrew language without recommendation or certainty terms', () => {

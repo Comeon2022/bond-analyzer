@@ -1,6 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiGet, apiUrl, getCreditSpreads, getCreditSummary, getOverview } from './api';
 
+const validCreditSummary = {
+  seriesCount: 0,
+  latestCommonObservationPeriod: null,
+  widestCurrentSpread: null,
+  narrowestCurrentSpread: null,
+  largest3mWidening: null,
+  largest3mNarrowing: null,
+  coverage: { seriesWithData: 0, seriesWithoutData: 0, metadataResolvedSeries: 0, metadataUnresolvedSeries: 0 },
+  sourceStatus: {
+    name: 'BOI SECDWH corporate spreads', sourceUrl: 'https://example.invalid/data', sourcePage: 'https://example.invalid/page',
+    lastSuccessAt: null, lastErrorAt: null, lastError: null, latestObservationPeriod: null,
+    observationCount: 0, seriesCount: 0, stale: true, status: 'pending',
+  },
+  changes: { bullets: [] },
+};
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('frontend API client', () => {
@@ -26,12 +42,15 @@ describe('frontend API client', () => {
   it('validates credit-spread and summary response shapes', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(Response.json({ series: [], sourceStatus: { status: 'pending' }, source: 'https://boi.org.il', dataflow: 'BOI.STATISTICS:SECDWH:1.0' }))
-      .mockResolvedValueOnce(Response.json({ seriesCount: 0, coverage: {}, sourceStatus: {}, changes: { bullets: [] } })));
+      .mockResolvedValueOnce(Response.json(validCreditSummary)));
     await expect(getCreditSpreads()).resolves.toMatchObject({ series: [], dataflow: 'BOI.STATISTICS:SECDWH:1.0' });
     await expect(getCreditSummary()).resolves.toMatchObject({ seriesCount: 0, changes: { bullets: [] } });
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ series: null })));
     await expect(getCreditSpreads()).rejects.toMatchObject({ kind: 'schema' });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ ...validCreditSummary, sourceStatus: {} })));
+    await expect(getCreditSummary()).rejects.toMatchObject({ kind: 'schema' });
   });
 
   it('rejects an overview response with a missing/null schema instead of rendering it as data', async () => {
