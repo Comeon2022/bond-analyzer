@@ -280,3 +280,22 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npx wrangler deploy --dry-run`: passed; this frontend-only phase requires no Worker deployment.
 - Implementation commit `71bda4d6fd5bffa806adb85e6f1a5d282f348641` (`Clarify top status and USD ILS labels`) was pushed to `origin/main`. The Git-triggered Pages deployment reported source `71bda4d` but the production alias initially served the previous bundle, so the verified local build was published directly to Pages project `bond-analyzer` on `main`. Deployment `b8e1b4da-1dab-457d-8d45-fa353506fa9d` is available at `https://b8e1b4da.bond-analyzer-av2.pages.dev`. The production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-CtjZL927.js` and `index-j3zxN34W.css`; UTF-8 checks confirmed the `דולר / שקל` and `מצב כולל היום` labels, the plain-language USD/ILS explanation, and the new status/narrative layout CSS.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; RAGOps was not accessed or modified. User-provided specs/CSV files remain unstaged.
+
+## Phase 1K executive brief rebuild — 2026-10-03
+
+### Implemented
+
+- Rebuilt the hero markup in `src/App.tsx` around the required reading order: one `מצב כולל היום` status strip, then exactly two desktop columns: `איפה אנחנו היום` on the right and `מבט קדימה` on the left. The strip keeps the regime, confidence, coverage, positive/mixed/negative counts, and corporate-credit status together. The former detached side rail and duplicate “today / forward” chips are removed.
+- Removed the nested inflation card and replaced it with a compact highlighted `אינפלציה:` line, its current signal state or clear missing-data text, date when available, and the accessible inflation explainer. The hero retains only the confidence, coverage, and inflation explainers.
+- Kept the current-state sentence and support/pressure groups together. Support and pressure labels are now `מה עוזר כרגע` and `מה עדיין לוחץ`; evidence strings are concise, and each list remains capped at three items. The forward column contains `תרחיש בסיס` and exactly three labeled lines: `אם המצב נמשך`, `שיפור אפשרי`, and `סיכון מרכזי`.
+- Replaced the previous status card/grid rules with a compact strip and equal-width two-column desktop layout. Typography establishes hierarchy without nested boxes. Mobile stacks status → today → forward and support → pressure, with no horizontal layout requirement. Only hero presentation/copy changed; the shared deterministic regime, confidence, coverage, credit classification, and outlook generation logic remain untouched.
+- Added regression checks for one instance of each main title, status-to-today-to-forward DOM order, status contents, removed rail/inflation card, compact inflation line, exactly three forward labels, and evidence list maximums/concise copy.
+
+### Verification and rollout
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (66 tests across 13 files).
+- `npm run build`: passed.
+- `npx wrangler deploy --dry-run`: passed; no Worker/API changes require deployment.
+- Pages rollout and commit SHA will be recorded after push.
+- Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; RAGOps was not accessed or modified. User-provided specs/CSV files remain unstaged.

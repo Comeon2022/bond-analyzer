@@ -21,8 +21,10 @@ describe('plain-language hero evidence', () => {
     expect(evidence.helps[1]).toContain('ריבית בנק ישראל ירדה');
     expect(evidence.helps[1]).toContain('עשוי להפחית לחץ');
     expect(evidence.helps[2]).toContain('התשואה הריאלית הארוכה ירדה');
-    expect(evidence.helps[2]).toContain('עשויה לתמוך');
+    expect(evidence.helps[2]).toContain('עשוי לתמוך');
     expect(evidence.pressures).toHaveLength(0);
+    expect(evidence.helps).toHaveLength(3);
+    expect(evidence.helps.every((bullet) => bullet.trim().split(/\s+/).length <= 20)).toBe(true);
   });
 
   it('places observed pressure in the pressure list and never turns missing signals into evidence', () => {
@@ -33,8 +35,10 @@ describe('plain-language hero evidence', () => {
     });
     expect(evidence.helps).toEqual([]);
     expect(evidence.pressures.join(' ')).toContain('ריבית בנק ישראל עלתה');
-    expect(evidence.pressures.join(' ')).toContain('פרוקסי תנאי הסיכון המקומי הורע');
-    expect(evidence.pressures.join(' ')).toContain('מרווחי האשראי המצרפיים התרחבו');
+    expect(evidence.pressures.join(' ')).toContain('פרוקסי הסיכון המקומי הורע');
+    expect(evidence.pressures.join(' ')).toContain('מרווחי האשראי התרחבו');
+    expect(evidence.helps.length).toBeLessThanOrEqual(3);
+    expect(evidence.pressures.length).toBeLessThanOrEqual(3);
     expect(evidence.pressures.join(' ')).not.toMatch(/לקנות|למכור|מומלץ|כדאי/);
   });
 });

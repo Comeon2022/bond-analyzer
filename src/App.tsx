@@ -450,7 +450,6 @@ function App() {
   const outlook = useMemo(() => data ? buildOutlookSummary({ regime: data.regime, signals: data.signals, creditContext }) : null, [data, creditContext]);
   const inflationCard = data?.cards.find((card) => card.key === 'cpi_inflation');
   const inflationStateLabel = !inflationCard || inflationCard.value === null || inflationCard.status === 'unknown' ? 'אין נתון עדכני' : inflationCard.status === 'green' ? 'תומכת יחסית' : inflationCard.status === 'red' ? 'מכבידה' : 'ניטרלית / מעורבת';
-  const forwardChip = data?.regime.status === 'green' ? 'תמיכה מתונה אם התנאים יימשכו' : data?.regime.status === 'yellow' ? 'תמונה מעורבת' : data?.regime.status === 'red' ? 'לחץ עשוי להימשך' : 'אין כיוון מאומת';
   const heroEvidence = buildHeroEvidence({ signals: data?.signals ?? [], cards: data?.cards ?? [], creditStatus: creditLoading ? null : outlook?.creditStatus ?? null });
 
 
@@ -464,35 +463,28 @@ function App() {
       {apiState==='no-data'&&<div className="info-banner" role="status"><b>ה־Worker ומסד הנתונים זמינים, אך עדיין אין תצפיות מאקרו.</b><span>הנתונים יופיעו לאחר קליטת התצפיות הראשונות מהמקורות.</span></div>}
 
       <section className="regime-panel" aria-labelledby="regime-title">
-        <div className="regime-layout">
-          <aside className="regime-rail" aria-label="מצב כולל היום">
-            <div className="legacy-regime"><span>מצב כולל היום</span><b>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</b></div>
-            <div className="regime-stats">
-              <div className="regime-stat"><b>{data?.regime.green ?? '—'}</b><span><i className="dot-green" />חיובי</span></div>
-              <div className="regime-stat"><b>{data?.regime.yellow ?? '—'}</b><span><i className="dot-yellow" />מעורב</span></div>
-              <div className="regime-stat"><b>{data?.regime.red ?? '—'}</b><span><i className="dot-red" />שלילי</span></div>
-            </div>
-            <div className="confidence-stat"><span>רמת ביטחון <ConceptExplainer concept="confidence" /></span><b>{outlook?.confidenceLabel ?? 'ממתין'}</b><span>כיסוי איתותים <ConceptExplainer concept="signalCoverage" /></span><b>{data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'}</b><div className="confidence-meter"><i style={{ width: data ? `${data.regime.coveragePct}%` : '0%' }} /></div></div>
-            <div className={`credit-outlook credit-outlook-${outlook?.creditStatus === 'זהיר' ? 'cautious' : outlook?.creditStatus === 'מעורב' ? 'mixed' : outlook?.creditStatus === 'תומך' ? 'supportive' : 'unavailable'}`} role="status"><b>אשראי קונצרני: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</b><span>{creditLoading ? 'טוען סיכום נתוני אשראי מבנק ישראל.' : outlook?.creditDetail ?? 'אין כרגע נתוני אשראי זמינים.'}</span></div>
-          </aside>
+        <div className="executive-brief">
+          <div className="briefing-status" role="status" aria-label="סיכום מצב השוק">
+            <b>מצב כולל היום</b>
+            <strong>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</strong>
+            <span className="briefing-status-item">{outlook?.confidenceLabel ?? 'ביטחון ממתין'} <ConceptExplainer concept="confidence" /></span>
+            <span className="briefing-status-item">כיסוי {data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'} <ConceptExplainer concept="signalCoverage" /></span>
+            <span className="briefing-counts"><i className="dot-green" />{data?.regime.green ?? '—'} חיובי <i className="dot-yellow" />{data?.regime.yellow ?? '—'} מעורבים <i className="dot-red" />{data?.regime.red ?? '—'} שלילי</span>
+            <span className="briefing-credit">אשראי: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</span>
+          </div>
           <div className="briefing-columns">
-            <div className="today-block">
-              <div className="eyebrow">היום · תמונת מצב</div>
-              <h2 id="regime-title">איפה אנחנו היום?</h2>
-              <div className="orientation-chips"><span>היום: {outlook?.overallLabel ?? 'ממתין לנתונים'}</span><span>קדימה: {forwardChip}</span></div>
-              <p className="today-regime">{outlook?.currentState ?? 'ממתין לאיתותים מאומתים ממקורות הנתונים.'}</p>
-              <div className="inflation-snapshot"><div><span>אינפלציה היום · {inflationStateLabel}</span><ConceptExplainer concept="inflation" /></div><b>{inflationStateLabel === 'אין נתון עדכני' ? 'אין נתון שנתי עדכני' : `${numberLabel(inflationCard!.value)}%`}</b><p>{inflationStateLabel === 'אין נתון עדכני' ? 'אין תצפית שנתית עדכנית ומאומתת להצגה; לכן לא נקבע אם האינפלציה תומכת או מכבידה.' : inflationCard?.explanation}</p><small>{inflationStateLabel === 'אין נתון עדכני' ? 'ממתין לתצפית שנתית רשמית ועדכנית' : `חודש מדד: ${dateLabel(data?.inflation.observationDate)}`}</small></div>
-              <div className="outlook-lists"><div><h3>מה עוזר כרגע לאג״ח</h3><ul>{(heroEvidence.helps.length ? heroEvidence.helps : ['אין כרגע איתות מאומת שמראה מה עוזר לאג״ח; איתותים חסרים אינם נחשבים לתמיכה.']).map((bullet, index) => <li key={`support-${index}`}>{bullet}</li>)}</ul></div><div><h3>מה עדיין לוחץ על השוק</h3><ul>{(heroEvidence.pressures.length ? heroEvidence.pressures : ['לא זוהה כרגע איתות מאומת שמצביע על לחץ בתחומים שנבדקו; אין בכך הבטחה שהתשואות ירדו.']).map((bullet, index) => <li key={`pressure-${index}`}>{bullet}</li>)}</ul></div></div>
-            </div>
-            <div className="forward-block">
-              <div className="eyebrow">מבט קדימה</div><h2>תרחיש בסיס</h2>
-              <p>{outlook?.baseCaseText ?? 'התרחיש יופיע לאחר טעינת איתותי מקור מאומתים.'}</p>
-              <div className="forward-list"><h3>מה יכול לשנות את התמונה</h3><ul>{[
-                'אם המצב הנוכחי נמשך: הכיוון נשאר תלוי בשילוב האינפלציה, הריבית והתשואות הארוכות.',
-                'שיפור אפשרי: האטה באינפלציה לצד התמתנות בתשואות הארוכות.',
-                'החמרה אפשרית: האצה באינפלציה, עלייה בתשואות או הרעה בתנאי הסיכון.',
-              ].map((item) => <li key={item}>{item}</li>)}</ul></div>
-            </div>
+            <section className="today-block" aria-labelledby="regime-title">
+              <h2 id="regime-title">איפה אנחנו היום</h2>
+              <p className="today-regime">{outlook?.currentState ?? 'אין די איתותים מאומתים לקביעת תמונת מצב עדכנית.'}</p>
+              <div className="inflation-line"><b>אינפלציה:</b><span>{inflationStateLabel === 'אין נתון עדכני' ? 'אין נתון שנתי עדכני' : `${numberLabel(inflationCard!.value)}% — ${inflationStateLabel}`}</span><ConceptExplainer concept="inflation" />{inflationCard?.observedAt && <small>נכון ל־{dateLabel(inflationCard.observedAt)}</small>}</div>
+              <div className="outlook-lists"><div><h3>מה עוזר כרגע</h3><ul className="support-list">{(heroEvidence.helps.length ? heroEvidence.helps : ['אין איתות מאומת שמצביע כרגע על תמיכה.']).map((bullet, index) => <li key={`support-${index}`}>{bullet}</li>)}</ul></div><div><h3>מה עדיין לוחץ</h3><ul className="pressure-list">{(heroEvidence.pressures.length ? heroEvidence.pressures : ['אין איתות מאומת שמצביע כרגע על לחץ.']).map((bullet, index) => <li key={`pressure-${index}`}>{bullet}</li>)}</ul></div></div>
+            </section>
+            <section className="forward-block" aria-labelledby="forward-title">
+              <h2 id="forward-title">מבט קדימה</h2>
+              <h3>תרחיש בסיס</h3>
+              <p>{data?.regime.status === 'green' ? 'האיתותים עשויים להמשיך לתמוך בסביבה חיובית אם מגמת האינפלציה והריבית תישאר דומה; התשואות הארוכות עדיין למעקב.' : data?.regime.status === 'yellow' ? 'הסביבה נותרת מעורבת, ולכן כיוון התשואות תלוי בנתונים הבאים.' : data?.regime.status === 'red' ? 'הלחץ עשוי להימשך אם האינפלציה, התשואות הארוכות או תנאי הסיכון ימשיכו להכביד.' : 'אין די נתונים מאומתים לגיבוש כיוון; התחזית תתעדכן עם הצטברות איתותים.'}</p>
+              <ul className="forward-list"><li><b>אם המצב נמשך:</b> הכיוון תלוי בשילוב האינפלציה, הריבית והתשואות הארוכות.</li><li><b>שיפור אפשרי:</b> האטה באינפלציה לצד התמתנות בתשואות הארוכות.</li><li><b>סיכון מרכזי:</b> האצה באינפלציה, עלייה בתשואות או הרעה בתנאי הסיכון.</li></ul>
+            </section>
           </div>
         </div>
         <div className="regime-foot"><span>משוקלל לפי הגדרות מרכזיות · מידע חסר אינו נחשב ניטרלי</span><span>עדכון: {dateLabel(data?.generatedAt)}</span></div>

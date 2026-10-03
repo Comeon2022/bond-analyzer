@@ -24,46 +24,46 @@ export function buildHeroEvidence({ signals, cards, creditStatus }: HeroEvidence
   const pressures: string[] = [];
   const inflation = cards.find((card) => card.key === 'cpi_inflation');
   if (inflation?.status === 'green' && inflation.value !== null) {
-    helps.push(`האינפלציה השנתית ${percent(inflation.value)} ובמגמת ירידה בתוך היעד; זה מפחית את הלחץ לעליית ריבית ועשוי לתמוך באג״ח.`);
+    helps.push(`האינפלציה השנתית ${percent(inflation.value)} בתוך היעד ויורדת; הלחץ לעליית ריבית מתמתן, דבר שעשוי לתמוך באג״ח.`);
   } else if (inflation?.status === 'yellow') {
-    pressures.push('האינפלציה בתוך היעד אך לא נרשמה ירידה ברורה; לכן עדיין אין ממנה תמיכה ברורה להפחתת לחץ הריבית.');
+    pressures.push('האינפלציה בתוך היעד, אך אינה יורדת בבירור; אין כרגע הקלה ברורה בלחץ הריבית.');
   } else if (inflation?.status === 'red' && inflation.value !== null) {
-    pressures.push(`האינפלציה השנתית ${percent(inflation.value)} והאיתות מכביד; הדבר עלול להשאיר לחץ לעליית ריבית ולהכביד על אג״ח.`);
+    pressures.push(`האינפלציה השנתית ${percent(inflation.value)} מכבידה ועלולה להשאיר לחץ לעליית ריבית ולתשואות האג״ח.`);
   }
 
   const policy = stateOf(signals, 'policy_rate');
   const policyCard = cards.find((card) => card.key === 'policy_rate');
   if (policy === 'green') {
     const level = percent(policyCard?.value);
-    helps.push(`ריבית בנק ישראל ירדה לעומת תקופת ההשוואה${level ? ` וכעת היא ${level}` : ''}; אם הכיוון יימשך, הוא עשוי להפחית לחץ על תשואות בהמשך.`);
+    helps.push(`ריבית בנק ישראל ירדה${level ? ` וכעת היא ${level}` : ''}; אם הכיוון יימשך, הוא עשוי להפחית לחץ על התשואות.`);
   } else if (policy === 'red') {
-    pressures.push('ריבית בנק ישראל עלתה לעומת תקופת ההשוואה; הדבר עשוי להעלות את תשואות האג״ח ולהכביד על מחירן.');
+    pressures.push('ריבית בנק ישראל עלתה; הדבר עשוי להעלות תשואות ולהכביד על מחירי אג״ח.');
   } else if (policy === 'yellow') {
-    pressures.push('ריבית בנק ישראל כמעט לא השתנתה בתקופת ההשוואה; כרגע היא אינה מספקת איתות ברור להקלה בתשואות.');
+    pressures.push('ריבית בנק ישראל כמעט לא השתנתה; אין ממנה איתות ברור להקלה בתשואות.');
   }
 
   const realYield = stateOf(signals, 'long_real_yield');
   const longTrend = stateOf(signals, 'long_yield_momentum');
   if (realYield === 'green' && longTrend !== 'red') {
-    helps.push('התשואה הריאלית הארוכה ירדה בתקופת ההשוואה; ירידה כזו עשויה לתמוך במחירי אג״ח קיימות.');
+    helps.push('התשואה הריאלית הארוכה ירדה; הדבר עשוי לתמוך במחירי אג״ח קיימות.');
   } else if (longTrend === 'green' && realYield === 'unknown') {
-    helps.push('מגמת התשואות הארוכות מצביעה על ירידה בתקופת ההשוואה; ירידה כזו עשויה לתמוך במחירי אג״ח קיימות.');
+    helps.push('מגמת התשואות הארוכות מצביעה על ירידה שעשויה לתמוך במחירי אג״ח קיימות.');
   } else if (realYield === 'red' || longTrend === 'red') {
     pressures.push(realYield === 'red' && longTrend === 'red'
-      ? 'התשואה הריאלית ומגמת התשואות הארוכות עלו בתקופות ההשוואה; עלייה בתשואות מכבידה בדרך כלל על מחירי אג״ח קיימות.'
-      : 'אחד מאותות התשואות הארוכות מצביע על עלייה; עלייה כזו עשויה להכביד על מחירי אג״ח קיימות.');
+      ? 'התשואה הריאלית ומגמת התשואות הארוכות עלו; הדבר מכביד בדרך כלל על מחירי אג״ח קיימות.'
+      : 'אחד מאותות התשואות הארוכות מצביע על עלייה שעשויה להכביד על מחירי אג״ח קיימות.');
   } else if (realYield === 'yellow' || longTrend === 'yellow' || (realYield !== 'unknown' && longTrend !== 'unknown')) {
-    pressures.push('התשואות הארוכות יציבות או מאותתות בכיוונים שונים; לכן עדיין אין מהן אישור ברור לתמיכה במחירי אג״ח ארוכות.');
+    pressures.push('התשואות הארוכות יציבות או מאותתות בכיוונים שונים; אין מהן אישור ברור לתמיכה.');
   }
 
   const risk = stateOf(signals, 'israel_risk_proxy');
-  if (risk === 'green') helps.push('פרוקסי תנאי הסיכון המקומי השתפר לפי הרכיבים הזמינים; שיפור כזה מפחית חלק מהלחץ על אג״ח ישראליות.');
-  else if (risk === 'red') pressures.push('פרוקסי תנאי הסיכון המקומי הורע לפי הרכיבים הזמינים; הרעה כזו עשויה להכביד על אג״ח ישראליות.');
-  else if (risk === 'yellow') pressures.push('פרוקסי תנאי הסיכון המקומי מעורב; לכן הוא עדיין אינו מספק איתות ברור להקלה בלחץ.');
+  if (risk === 'green') helps.push('פרוקסי הסיכון המקומי השתפר; הדבר מפחית חלק מהלחץ על אג״ח ישראליות.');
+  else if (risk === 'red') pressures.push('פרוקסי הסיכון המקומי הורע; הדבר עשוי להכביד על אג״ח ישראליות.');
+  else if (risk === 'yellow') pressures.push('פרוקסי הסיכון המקומי מעורב; אין ממנו איתות ברור להקלה בלחץ.');
 
-  if (creditStatus === 'תומך') helps.push('בנתוני האשראי המצרפיים של בנק ישראל אין כרגע התרחבות חריגה במרווחים; זה מפחית חשש ללחץ מימון רוחבי.');
-  else if (creditStatus === 'זהיר') pressures.push('מרווחי האשראי המצרפיים התרחבו באופן מהותי; הדבר מצביע על תנאי מימון מכבידים יותר בחלק מהסדרות.');
-  else if (creditStatus === 'מעורב') pressures.push('נתוני מרווחי האשראי אינם אחידים; לכן הם אינם מאשרים הקלה רחבה בתנאי המימון.');
+  if (creditStatus === 'תומך') helps.push('בנתוני בנק ישראל אין התרחבות חריגה במרווחי האשראי; אין סימן ללחץ מימון רוחבי.');
+  else if (creditStatus === 'זהיר') pressures.push('מרווחי האשראי התרחבו מהותית; תנאי המימון מכבידים יותר בחלק מהסדרות.');
+  else if (creditStatus === 'מעורב') pressures.push('נתוני מרווחי האשראי אינם אחידים, ואינם מאשרים הקלה רחבה בתנאי המימון.');
 
   return { helps: helps.slice(0, 3), pressures: pressures.slice(0, 3) };
 }
