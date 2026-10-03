@@ -240,6 +240,6 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npm test`: passed (61 tests across 12 files).
 - `npm run build`: passed.
 - `npx wrangler deploy --dry-run`: passed. This phase changes only frontend/presentation and has no Worker/API changes; no Worker deployment is required.
-- Cloudflare Pages rollout is triggered by the frontend push and will be independently checked after push. No live market observations were added or used for UI copy.
+- Cloudflare Pages production deployment `796b105e-afcf-4fd6-aa88-ac101b931b7f` is on `main`, source commit `fde17c8`, for project `bond-analyzer` / `bond-analyzer-av2.pages.dev`. The page, JavaScript bundle, and stylesheet returned HTTP 200. The delivered bundle decodes as UTF-8 and contains the new “איפה אנחנו היום”, “מבט קדימה”, inflation snapshot, explainer, and drawer labels. No live market observations were added or used for UI copy.
 - Repository target verified as `bond-analyzer`, `origin https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
-- Remaining UX follow-up: the credit summary endpoint is separate from the macro overview; pass its aggregate summary into the outlook only if the UI later adopts an explicit shared loading/error state for that source.
+- Implementation commit: `fde17c8018fdf51e8ae4807dcb8fa832c57cbdd2` (`Improve dashboard clarity and explainers`), pushed to `origin/main`.
