@@ -216,6 +216,7 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npm run build`: passed.
 - `npx wrangler deploy --dry-run`: passed; this is frontend/shared logic only, so no Worker deployment was required.
 - Live production `GET /api/credit/summary` returned 3 series, latest common period `2026-09`, status `healthy`, `stale: false`. Runtime values are consumed from the API; none are stored in code.
-- Pages production rollout: pending verification after push.
-- Commit SHA: pending.
+- Pages production rollout verified after push: `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served the updated JavaScript bundle containing the `/api/credit/summary` consumer and normalized credit-context logic.
+- Production integration check: Worker `/api/credit/summary` returned HTTP 200 with CORS allowing `https://bond-analyzer-av2.pages.dev`; the live response reports 3 series, common period `2026-09`, `healthy`, and not stale.
+- Implementation commit SHA: `057b5dd23d8bbefd16d1062b8499479ddecc4dcd` (`Integrate BOI credit into macro outlook`), pushed to `origin/main`.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
