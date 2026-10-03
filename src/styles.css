@@ -392,3 +392,57 @@ h1, h2, h3, p { margin-top: 0; }
   .outlook-lists li { font-size: 14px; }
   .concept-dialog { inset: auto 10px 10px; width: auto; max-height: min(82dvh, 720px); margin: 0; padding: 22px 19px; }
 }
+
+/* Phase 1J: put the overall status first and keep the narrative blocks balanced. */
+.regime-panel { padding: 17px 20px 10px; }
+.regime-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; direction: rtl; align-items: start; }
+.regime-rail { grid-column: 1; display: grid; grid-template-columns: minmax(145px, .8fr) minmax(205px, 1fr) minmax(205px, 1fr) minmax(260px, 1.35fr); align-items: center; gap: 9px 16px; padding: 10px 13px; border: 1px solid #ffffff32; border-radius: 10px; background: #ffffff0d; }
+.legacy-regime { gap: 2px; padding: 0; }
+.legacy-regime > span { color: #d3e4ee; font-size: 12px; }
+.legacy-regime b { color: #fff; font-size: 17px; font-weight: 700; }
+.regime-rail .regime-stats { padding: 5px 0; border-top: 0; border-bottom: 0; }
+.regime-rail .regime-stat { padding: 0 8px; }
+.regime-rail .regime-stat b { font-size: 16px; }
+.regime-rail .regime-stat span { font-size: 11px; }
+.regime-rail .confidence-stat { display: grid; grid-template-columns: auto auto; align-items: center; justify-content: start; column-gap: 5px; padding: 0; }
+.regime-rail .confidence-stat > span { display: flex; align-items: center; gap: 2px; font-size: 11px; }
+.regime-rail .confidence-stat b { font-size: 12px; }
+.regime-rail .confidence-meter { grid-column: 1 / -1; width: 100%; margin: 2px 0; }
+.regime-rail .credit-outlook { grid-column: auto; margin: 0; min-width: 0; padding: 6px 9px; font-size: 12px; }
+.regime-rail .credit-outlook b { font-size: 12px; }
+.briefing-columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); align-items: start; gap: 20px; }
+.today-block { padding: 0; border-left: 0; }
+.today-block h2 { margin-bottom: 8px; }
+.orientation-chips { gap: 6px; margin: 7px 0; }
+.orientation-chips span { padding: 6px 9px; font-size: 13px; }
+.inflation-snapshot { margin-top: 10px; padding: 10px 13px; }
+.outlook-lists { gap: 16px; margin-top: 12px; }
+.outlook-lists h3 { font-size: 15px; }
+.outlook-lists li { font-size: 14px; line-height: 1.55; }
+.forward-block { padding: 12px 14px; }
+.forward-block > p { margin-bottom: 8px; }
+.forward-list { margin-top: 8px; }
+.forward-list li { font-size: 13px; line-height: 1.5; margin-bottom: 4px; }
+.regime-foot { display: flex; justify-content: space-between; gap: 12px; padding-top: 3px; }
+.global-markets-panel .panel-title p { margin: 4px 0 0; color: #536779; font-size: 14px; line-height: 1.55; }
+.global-markets-panel .inflation-stat > span { display: flex; align-items: center; gap: 3px; }
+.global-markets-panel .inflation-stat > small:first-of-type { display: block; }
+@media (max-width: 1000px) {
+  .regime-rail { grid-template-columns: minmax(140px, .7fr) minmax(200px, 1fr) minmax(190px, 1fr); }
+  .regime-rail .credit-outlook { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .regime-panel { padding: 13px 13px 9px; }
+  .regime-layout { gap: 12px; }
+  .regime-rail { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 9px 12px; padding: 10px; }
+  .regime-rail .regime-stats { grid-column: 1 / -1; }
+  .regime-rail .confidence-stat { grid-column: 1; }
+  .regime-rail .credit-outlook { grid-column: 1 / -1; }
+  .briefing-columns { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .forward-block { padding: 12px; }
+}
+@media (max-width: 480px) {
+  .regime-rail { grid-template-columns: 1fr; }
+  .regime-rail .regime-stats, .regime-rail .confidence-stat, .regime-rail .credit-outlook { grid-column: 1; }
+  .regime-foot { flex-direction: column; gap: 2px; }
+}

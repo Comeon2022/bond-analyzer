@@ -31,12 +31,12 @@ const STATUS: Record<SignalStatus, { label: string; className: string }> = {
 const SOURCE_STATUS: Record<SourceStatus['status'], string> = { ok: 'עודכן', stale: 'נתון ישן', error: 'שגיאת עדכון', pending: 'ממתין לנתונים' };
 const REGIME_STATUS_HE: Record<SignalStatus, string> = { green: 'חיובי', yellow: 'מעורב', red: 'שלילי', unknown: 'אין נתון' };
 
-function seriesLabel(key: string): string {
+export function seriesLabel(key: string): string {
   const labels: Record<string, string> = {
-    usd_ils: 'שער דולר / שקל',
-    us_10y_nominal: 'תשואה נומינלית בארצות הברית ל־10 שנים',
-    us_10y_real: 'תשואה ריאלית בארצות הברית ל־10 שנים',
-    il_us_real_yield_differential: 'פער תשואות ריאליות · ישראל וארצות הברית',
+    usd_ils: 'דולר / שקל',
+    us_10y_nominal: 'תשואת אג״ח ארה״ב ל־10 שנים',
+    us_10y_real: 'תשואה ריאלית בארה״ב ל־10 שנים',
+    il_us_real_yield_differential: 'פער תשואה ריאלית ישראל–ארה״ב',
     il_bei_1y: 'ציפיות אינפלציה לשנה',
     il_bei_5y: 'ציפיות אינפלציה לחמש שנים',
     il_bei_5y5y: 'ציפיות אינפלציה לחמש שנים בעוד חמש שנים',
@@ -465,6 +465,17 @@ function App() {
 
       <section className="regime-panel" aria-labelledby="regime-title">
         <div className="regime-layout">
+          <aside className="regime-rail" aria-label="מצב כולל היום">
+            <div className="legacy-regime"><span>מצב כולל היום</span><b>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</b></div>
+            <div className="regime-stats">
+              <div className="regime-stat"><b>{data?.regime.green ?? '—'}</b><span><i className="dot-green" />חיובי</span></div>
+              <div className="regime-stat"><b>{data?.regime.yellow ?? '—'}</b><span><i className="dot-yellow" />מעורב</span></div>
+              <div className="regime-stat"><b>{data?.regime.red ?? '—'}</b><span><i className="dot-red" />שלילי</span></div>
+            </div>
+            <div className="confidence-stat"><span>רמת ביטחון <ConceptExplainer concept="confidence" /></span><b>{outlook?.confidenceLabel ?? 'ממתין'}</b><span>כיסוי איתותים <ConceptExplainer concept="signalCoverage" /></span><b>{data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'}</b><div className="confidence-meter"><i style={{ width: data ? `${data.regime.coveragePct}%` : '0%' }} /></div></div>
+            <div className={`credit-outlook credit-outlook-${outlook?.creditStatus === 'זהיר' ? 'cautious' : outlook?.creditStatus === 'מעורב' ? 'mixed' : outlook?.creditStatus === 'תומך' ? 'supportive' : 'unavailable'}`} role="status"><b>אשראי קונצרני: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</b><span>{creditLoading ? 'טוען סיכום נתוני אשראי מבנק ישראל.' : outlook?.creditDetail ?? 'אין כרגע נתוני אשראי זמינים.'}</span></div>
+          </aside>
+          <div className="briefing-columns">
             <div className="today-block">
               <div className="eyebrow">היום · תמונת מצב</div>
               <h2 id="regime-title">איפה אנחנו היום?</h2>
@@ -482,16 +493,7 @@ function App() {
                 'החמרה אפשרית: האצה באינפלציה, עלייה בתשואות או הרעה בתנאי הסיכון.',
               ].map((item) => <li key={item}>{item}</li>)}</ul></div>
             </div>
-            <div className={`credit-outlook credit-outlook-${outlook?.creditStatus === 'זהיר' ? 'cautious' : outlook?.creditStatus === 'מעורב' ? 'mixed' : outlook?.creditStatus === 'תומך' ? 'supportive' : 'unavailable'}`} role="status"><b>אשראי קונצרני: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</b><span>{creditLoading ? 'טוען סיכום נתוני אשראי מבנק ישראל.' : outlook?.creditDetail ?? 'אין כרגע נתוני אשראי זמינים.'}</span></div>
-          <aside className="regime-rail" aria-label="סיכום איתותים">
-            <div className="legacy-regime"><span>מצב כולל · היום</span><b>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</b></div>
-            <div className="regime-stats">
-              <div className="regime-stat"><b>{data?.regime.green ?? '—'}</b><span><i className="dot-green" />חיוביים</span></div>
-              <div className="regime-stat"><b>{data?.regime.yellow ?? '—'}</b><span><i className="dot-yellow" />מעורבים</span></div>
-              <div className="regime-stat"><b>{data?.regime.red ?? '—'}</b><span><i className="dot-red" />שליליים</span></div>
-            </div>
-            <div className="confidence-stat"><span>רמת ביטחון <ConceptExplainer concept="confidence" /></span><b>{outlook?.confidenceLabel ?? 'ממתין'}</b><div className="confidence-meter"><i style={{ width: data ? `${data.regime.coveragePct}%` : '0%' }} /></div><span>כיסוי איתותים <ConceptExplainer concept="signalCoverage" /></span><b>{data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'}</b></div>
-          </aside>
+          </div>
         </div>
         <div className="regime-foot"><span>משוקלל לפי הגדרות מרכזיות · מידע חסר אינו נחשב ניטרלי</span><span>עדכון: {dateLabel(data?.generatedAt)}</span></div>
       </section>
@@ -500,9 +502,9 @@ function App() {
       <section className="cards-grid" aria-label="ששת מדדי הליבה">{data?.cards.map((card) => <MacroCardView key={card.key} card={card} onOpen={setSelected} />) ?? Array.from({ length: 6 }, (_, index) => <div className="card-skeleton" key={index}><span /><i /><b /><small /></div>)}</section>
       <section className="panel inflation-feature" aria-label="תמונת מצב האינפלציה"><InflationPanel data={data?.inflation ?? { latestIndex: null, mom: null, yoy: null, previousYoy: null, observationDate: null, targetLow: 1, targetHigh: 3, observations: [] }} /></section>
 
-      <section className="panel">
-        <div className="panel-title"><div><span className="eyebrow">הקשר שוק בינלאומי</span><h2>שערי חליפין, תשואות ארצות הברית ופער התשואות הריאליות</h2></div></div>
-        <div className="inflation-stats">{data && [data.markets.usdIls, data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)}</span><b>{numberLabel(series.value)} {marketUnitLabel(series.unit)}</b><small>{series.observationDate ?? 'ממתין לתצפית'} · {series.source}</small></div>)}</div>
+      <section className="panel global-markets-panel">
+        <div className="panel-title"><div><span className="eyebrow">הקשר שוק בינלאומי</span><h2>דולר / שקל, תשואות ארה״ב ופער התשואות</h2><p>שער הדולר מול השקל לצד נתוני תשואה אמריקאיים ופער התשואות הריאליות.</p></div></div>
+        <div className="inflation-stats">{data && [data.markets.usdIls, data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)} <ConceptExplainer concept={series.key === 'usd_ils' ? 'usdIls' : series.key === 'us_10y_nominal' ? 'usNominal10y' : series.key === 'us_10y_real' ? 'usReal10y' : 'realYieldDifferential'} /></span>{series.key === 'usd_ils' && <small>שער הדולר מול השקל</small>}<b>{numberLabel(series.value)} {marketUnitLabel(series.unit)}</b><small>{series.observationDate ?? 'ממתין לתצפית'} · {series.source}</small></div>)}</div>
         <p>שער החליפין היציג של בנק ישראל הוא אינדיקטיבי. פער התשואות הריאליות משווה בין תשואות ואינו נתון CDS.</p>
         <div className="inflation-stats">{data && [data.markets.usdIls, data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={`${series.key}-changes`}><span>שינויים זמינים · {seriesLabel(series.key)}</span>{Object.entries(series.changes).map(([key, value]) => <small key={key}>{changeLabel(key)}: {value === null ? 'אין תצפית להשוואה' : `${numberLabel(value, 2)} ${marketUnitLabel(series.unit)}`}</small>)}<small>מקור: <a href={series.sourceUrl} target="_blank" rel="noreferrer">{series.source}</a> · מצב: {marketStatusLabel(series.status)}</small></div>)}</div>
         <p>{data?.markets.riskProxy.label}: {data?.markets.riskProxy.components.map((component) => `${seriesLabel(component.key)} ${component.value === null ? 'אין נתון' : numberLabel(component.value, 2)} ${marketUnitLabel(component.unit)} (${REGIME_STATUS_HE[component.status]}, ${component.sourceObservationDate ?? 'ללא תאריך'})`).join(' · ')}</p>

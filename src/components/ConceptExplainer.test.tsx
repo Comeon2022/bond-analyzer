@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import App, { DetailDrawer } from '../App';
 import ConceptExplainer, { ConceptExplanationDialog } from './ConceptExplainer';
 import { CONCEPT_EXPLANATIONS } from '../lib/concepts';
+import { seriesLabel } from '../App';
 import type { MacroCard } from '../../shared/types';
 
 describe('Phase 1H accessible concept explanations', () => {
@@ -32,7 +33,7 @@ describe('Phase 1H accessible concept explanations', () => {
   });
 
   it('provides complete Hebrew explanations for every required macro and bond term', () => {
-    const terms = ['policyRate', 'inflation', 'cpiIndex', 'inflationExpectations', 'realYield', 'nominalYield', 'realYield10y', 'longYieldTrend', 'israelRiskProxy', 'corporateCreditSpreads', 'telBondShekeli', 'spread', 'basisPoints', 'yieldCurve', 'signalCoverage', 'confidence', 'duration', 'yieldToMaturity'] as const;
+    const terms = ['policyRate', 'inflation', 'cpiIndex', 'inflationExpectations', 'realYield', 'nominalYield', 'realYield10y', 'longYieldTrend', 'israelRiskProxy', 'corporateCreditSpreads', 'telBondShekeli', 'spread', 'basisPoints', 'yieldCurve', 'signalCoverage', 'confidence', 'duration', 'yieldToMaturity', 'usdIls', 'usNominal10y', 'usReal10y', 'realYieldDifferential'] as const;
     for (const id of terms) {
       const item = CONCEPT_EXPLANATIONS[id];
       expect(item.title.length).toBeGreaterThan(2);
@@ -51,6 +52,37 @@ describe('Phase 1H accessible concept explanations', () => {
     expect(html).toContain('אינפלציה היום');
     expect(html).toContain('אין נתון שנתי עדכני');
     expect(html).toContain('תרחיש בסיס');
+  });
+
+  it('places the complete overall status before the today and forward narrative', () => {
+    const html = renderToStaticMarkup(<App />);
+    const statusStart = html.indexOf('aria-label="מצב כולל היום"');
+    const todayStart = html.indexOf('id="regime-title"');
+    const forwardStart = html.indexOf('class="forward-block"');
+    expect(statusStart).toBeGreaterThanOrEqual(0);
+    expect(statusStart).toBeLessThan(todayStart);
+    expect(todayStart).toBeLessThan(forwardStart);
+    expect(html).toContain('ממתין לנתוני שוק');
+    expect(html).toContain('חיובי');
+    expect(html).toContain('מעורב');
+    expect(html).toContain('שלילי');
+    expect(html).toContain('רמת ביטחון');
+    expect(html).toContain('כיסוי איתותים');
+    expect(html).toContain('אשראי קונצרני:');
+  });
+
+  it('uses clear USD/ILS wording and provides plain-language explanations for the global market series', () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(seriesLabel('usd_ils')).toBe('דולר / שקל');
+    expect(seriesLabel('us_10y_nominal')).toBe('תשואת אג״ח ארה״ב ל־10 שנים');
+    expect(seriesLabel('us_10y_real')).toBe('תשואה ריאלית בארה״ב ל־10 שנים');
+    expect(seriesLabel('il_us_real_yield_differential')).toBe('פער תשואה ריאלית ישראל–ארה״ב');
+    expect(html).toContain('דולר / שקל, תשואות ארה״ב ופער התשואות');
+    expect(html).not.toContain('שערי חליפין');
+    expect(CONCEPT_EXPLANATIONS.usdIls.what).toBe('כמה שקלים נדרשים כדי לקנות דולר אחד.');
+    expect(CONCEPT_EXPLANATIONS.usdIls.why).toBe('שינוי חד בשקל יכול להשפיע על אינפלציה, על תנאי הסיכון המקומיים ועל שוק האג״ח.');
+    expect(CONCEPT_EXPLANATIONS.usdIls.howToRead).toContain('מספר גבוה יותר פירושו בדרך כלל שקל חלש יותר מול הדולר');
+    expect((['usNominal10y', 'usReal10y', 'realYieldDifferential'] as const).every((key) => Boolean(CONCEPT_EXPLANATIONS[key].what))).toBe(true);
   });
 
   it('puts simple Hebrew drawer sections before collapsed source and calculation details', () => {

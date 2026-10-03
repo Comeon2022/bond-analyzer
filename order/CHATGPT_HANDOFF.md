@@ -261,3 +261,22 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npx wrangler deploy --dry-run`: passed; Wrangler resolved the configured dashboard D1 and asset bindings. No Worker behavior or API contract changed, so no Worker deployment was needed.
 - After the commit push, the Git-triggered Pages deployment reported source `3d3ed6c` but the production alias initially still served the previous frontend bundle. Published the verified local `dist/` build directly to Pages project `bond-analyzer` on branch `main`; deployment `9b2a865d-7990-488f-810d-b929e873d506` is available at `https://9b2a865d.bond-analyzer-av2.pages.dev`. The production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served entry assets `index-DmJ_RzG9.js` and `index-B9QkiX2J.css`; UTF-8 content checks confirmed both new hero labels, native `showModal()` behavior, and `.concept-dialog::backdrop` styling.
 - Repository identity verified as `bond-analyzer`, `origin https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified. User-provided specs/CSV files under `order/` and the repository root are not task changes and must remain unstaged.
+
+## Phase 1J top status and USD/ILS clarity — 2026-10-03
+
+### Implemented
+
+- Renamed the USD/ILS metric to `דולר / שקל`; the global-market section now reads `דולר / שקל, תשואות ארה״ב ופער התשואות` with the subtitle `שער הדולר מול השקל לצד נתוני תשואה אמריקאיים ופער התשואות הריאליות.` The USD/ILS metric also carries the short subtitle `שער הדולר מול השקל`. Replaced the long U.S. series labels with `תשואת אג״ח ארה״ב ל־10 שנים`, `תשואה ריאלית בארה״ב ל־10 שנים`, and `פער תשואה ריאלית ישראל–ארה״ב`; the generic `שערי חליפין` title is removed.
+- Added reusable explainers for `דולר / שקל`, U.S. 10-year nominal yield, U.S. 10-year real yield, and Israel–U.S. real-yield differential. The FX explainer states how many shekels buy one dollar, describes possible context for inflation/local risk/bonds without implying a fixed causal effect, and explains how to read a higher or lower rate.
+- Moved the complete `מצב כולל היום` rail before both narrative sections in DOM order and made it a compact, full-width dashboard header. It contains the current regime, green/yellow/red counts, confidence, signal coverage, and corporate-credit status. The narrative follows as current state then forward view. Removed the lower-right detached placement.
+- Tightened hero padding and vertical gaps; balanced current and forward sections across the available width on desktop and stacked status → today → forward on mobile. Deterministic outlook, regime methodology, and API/data behavior are unchanged.
+- Added tests for USD/ILS and U.S. yield labels/explainers, no generic FX title, complete overall-status content and DOM order, and existing concept availability.
+
+### Verification and rollout
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (66 tests across 13 files), including unchanged shared deterministic outlook tests.
+- `npm run build`: passed.
+- `npx wrangler deploy --dry-run`: passed; this frontend-only phase requires no Worker deployment.
+- Pages rollout and implementation commit SHA will be appended after pushing.
+- Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; RAGOps was not accessed or modified. User-provided specs/CSV files remain unstaged.
