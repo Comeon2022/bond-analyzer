@@ -196,7 +196,6 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npx wrangler deploy --dry-run`: passed.
 - This phase changes only shared interpretation code and the frontend; no Worker/API deployment is required. No GitHub Actions deployment workflow or direct Pages deployment command is present in the repository. The changes are being published to the dashboard's verified `main` branch; Cloudflare Pages production rollout was not independently verified here.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
-- Remaining UX follow-up: the credit summary endpoint is separate from the macro overview; pass its aggregate summary into the outlook only if the UI later adopts an explicit shared loading/error state for that source.
 
 ## Phase 1G credit conditions in the deterministic outlook — 2026-10-03
 
@@ -220,3 +219,27 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Production integration check: Worker `/api/credit/summary` returned HTTP 200 with CORS allowing `https://bond-analyzer-av2.pages.dev`; the live response reports 3 series, common period `2026-09`, `healthy`, and not stale.
 - Implementation commit SHA: `057b5dd23d8bbefd16d1062b8499479ddecc4dcd` (`Integrate BOI credit into macro outlook`), pushed to `origin/main`.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
+
+
+## Phase 1H clarity, accessibility, and plain-language explainers — 2026-10-03
+
+### Implemented
+
+- Reorganized the executive hero into distinct `איפה אנחנו היום` and `מבט קדימה` blocks, with separate orientation chips, a concise current-state line, supporting/pressuring bullets, a conditional base-case paragraph, and three deterministic conditions describing persistence, improvement, and deterioration. Existing green/yellow/red regime counts, weighted status, coverage, confidence, and independent credit status remain visible.
+- Surfaced annual inflation in the hero from the existing CPI signal and its freshness/status. The snapshot labels the reading supportive, neutral/mixed, or pressuring from the deterministic signal classification, uses the signal explanation, and explicitly says when there is no current verified annual reading. The full official CPI card now follows the core metric cards, is visually emphasized, has a larger value, explains annual inflation versus the index, and distinguishes missing data from zero.
+- Added `src/lib/concepts.ts` and reusable native `<details>/<summary>` disclosure `src/components/ConceptExplainer.tsx`. It provides RTL, keyboard operation, a 44px target, visible focus styling, and plain Hebrew answers to “מה זה?”, “למה זה חשוב?”, and “איך לקרוא את זה?” with optional detail. Explanations cover policy rate, CPI/inflation, expectations, real/nominal yields, 10-year real yield, long-yield trend, Israel risk proxy, aggregate corporate credit spreads, Tel Bond Shekeli, spread, basis points, yield curve, coverage, confidence, duration, and YTM. Tel Bond explanatory copy explicitly avoids implying that the dashboard contains Tel Bond data.
+- Added help alongside macro cards, inflation, expectations, yield curves, risk proxy, credit panel/table, confidence and coverage, and bond screener/drawer concepts. The proxy is described as a local financial-risk aid, not a CDS quote. Help appears through keyboard-operable disclosure controls and does not depend on hover.
+- Macro and bond drawers now start with `בשורה אחת` and plain-language context before placing classification rules, numeric computation inputs, market detail, and provenance inside the expandable `הנתון מאחורי הקלעים` section. Drawer dimensions, line-height, and technical text sizes were increased while retaining scroll behavior and the existing source/freshness details.
+- Increased typography and spacing for the hero, cards, cards’ source labels, inflation, charts/captions, source/provenance blocks, tables, and drawers. The layout stacks on narrow screens; disclosure panels remain scrollable and focusable.
+- Added `src/components/ConceptExplainer.test.tsx` tests for native accessible markup, all required concepts, current/forward/inflation summary labels, and the macro drawer’s simple-first/collapsed-technical order. Vitest now includes `.test.tsx` files.
+- No LLM output, fabricated market observations, or recommendation language was added; outlook remains deterministic and still distinguishes missing/unavailable source data.
+
+### Verification and rollout
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (61 tests across 12 files).
+- `npm run build`: passed.
+- `npx wrangler deploy --dry-run`: passed. This phase changes only frontend/presentation and has no Worker/API changes; no Worker deployment is required.
+- Cloudflare Pages rollout is triggered by the frontend push and will be independently checked after push. No live market observations were added or used for UI copy.
+- Repository target verified as `bond-analyzer`, `origin https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
+- Remaining UX follow-up: the credit summary endpoint is separate from the macro overview; pass its aggregate summary into the outlook only if the UI later adopts an explicit shared loading/error state for that source.

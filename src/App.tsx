@@ -11,6 +11,13 @@ import type { BondBenchmarkResponse, BondDetailResponse, BondHistoryResponse, Cr
 import { loadMacroAndCreditIndependently } from './lib/dashboard-loader';
 import { normalizeCreditOutlookContext } from './lib/credit-outlook';
 import CreditPanel from './CreditPanel';
+import ConceptExplainer from './components/ConceptExplainer';
+import { CONCEPT_EXPLANATIONS, type ConceptExplanation, type ConceptId } from './lib/concepts';
+
+const CARD_CONCEPT: Record<string, ConceptId> = {
+  policy_rate: 'policyRate', cpi_inflation: 'inflation', inflation_expectations: 'inflationExpectations',
+  long_real_yield: 'realYield10y', long_yield_momentum: 'longYieldTrend', israel_risk_proxy: 'israelRiskProxy',
+};
 
 
 const STATUS: Record<SignalStatus, { label: string; className: string }> = {
@@ -99,18 +106,19 @@ function MacroCardView({ card, onOpen }: { card: MacroCard; onOpen: (card: Macro
     : card.value === null ? '—' : `${numberLabel(card.value)}${card.unit ? ` ${card.unit}` : ''}`;
   const sourceAvailable = card.sourceUrl !== '#';
   return (
-    <button className={`signal-card ${status.className} ${card.pending ? 'pending' : ''}`} onClick={() => onOpen(card)} aria-label={`פרטים: ${card.title}`}>
+    <article className={`signal-card ${status.className} ${card.pending ? 'pending' : ''}`}>
       <div className="card-topline"><span className="card-category">{card.pending ? 'בשלב הבא' : card.key === 'cpi_inflation' ? 'מחירים' : card.key === 'policy_rate' ? 'מדיניות מוניטרית' : 'עקום ממשלתי'}</span><span className={`status-pill ${status.className}`}><SourceDot status={card.pending ? 'pending' : card.status === 'unknown' ? 'pending' : 'ok'} />{status.label}</span></div>
-      <div className="card-title">{card.title}<span className="arrow" aria-hidden="true">↗</span></div>
+      <div className="card-title">{card.title}{CARD_CONCEPT[card.key] && <ConceptExplainer concept={CARD_CONCEPT[card.key]} />}</div>
       <div className={`metric-value ${card.value === null ? 'no-value' : ''}`}>{mainValue}</div>
-      {card.key === 'cpi_inflation' && <div className="metric-caption">שינוי ב-12 החודשים האחרונים</div>}
+      {card.key === 'cpi_inflation' && <div className="metric-caption">אינפלציה שנתית · שינוי ב־12 החודשים האחרונים</div>}
       {card.key === 'long_yield_momentum' && <div className="metric-caption">תנועה בתקופת מקור של כחודש</div>}
       {delta && <div className={`metric-delta ${delta.className}`}>{delta.text}</div>}
       {!delta && card.pending && <div className="metric-delta">מקור רשמי טרם חובר</div>}
       <div className="sparkline-wrap"><Sparkline data={card.history} status={card.status} /></div>
       <div className="card-explanation">{card.explanation}</div>
       <div className="card-footer"><span>{sourceAvailable ? card.source : 'מקור בתהליך'}</span><span>{dateLabel(card.observedAt)}</span></div>
-    </button>
+      <button className="card-detail-button" onClick={() => onOpen(card)}>לקריאה פשוטה ולנתוני המקור</button>
+    </article>
   );
 }
 
@@ -147,8 +155,10 @@ function shiftDate(date: string, days: number): string {
   return shifted.toISOString().slice(0, 10);
 }
 
-function DetailDrawer({ card, signal, onClose }: { card: MacroCard; signal: OverviewResponse['signals'][number] | undefined; onClose: () => void }) {
+export function DetailDrawer({ card, signal, onClose }: { card: MacroCard; signal: OverviewResponse['signals'][number] | undefined; onClose: () => void }) {
   const state = STATUS[card.status];
+  const conceptId = CARD_CONCEPT[card.key];
+  const concept: ConceptExplanation | null = conceptId ? CONCEPT_EXPLANATIONS[conceptId] : null;
   const rules: Record<string, string[]> = {
     policy_rate: ['ירוק: ירידה בריבית לעומת התצפית הזמינה מלפני כ-20 תצפיות.', 'צהוב: שינוי קטן או יציבות.', 'אדום: עלייה בריבית לעומת תצפית ההשוואה.', 'הריבית הקצרה משפיעה אך אינה קובעת מכנית תשואות ארוכות.'],
     cpi_inflation: ['ירוק: אינפלציה שנתית בתוך היעד ובמגמת ירידה.', 'צהוב: בתוך היעד ללא מגמת ירידה ברורה.', 'אדום: מעל היעד או עלייה משמעותית.', 'החישוב מבוסס על רמות המדד החודשי של הלמ״ס.'],
@@ -162,12 +172,15 @@ function DetailDrawer({ card, signal, onClose }: { card: MacroCard; signal: Over
       <button className="close-button" onClick={onClose} aria-label="סגירה">×</button>
       <div className="eyebrow">פירוט מקור וכלל</div>
       <h2 id="detail-title">{card.title}</h2>
+      <div className="drawer-section plain-language"><h3>בשורה אחת</h3><p>{card.explanation}</p><ConceptExplainer concept={conceptId ?? 'inflation'} /></div>
+      {concept && <><div className="drawer-section plain-language"><h3>למה זה חשוב</h3><p>{concept.why}</p></div><div className="drawer-section plain-language"><h3>איך לחשוב על זה</h3><ul><li>{concept.howToRead}</li>{concept.moreDetail && <li>{concept.moreDetail}</li>}</ul></div></>}
       <div className="drawer-value">{card.value === null ? 'אין נתון' : `${numberLabel(card.value)}${card.unit ? ` ${card.unit}` : ''}`}</div>
       <span className={`status-pill ${state.className}`}><SourceDot status={card.status === 'unknown' ? 'pending' : 'ok'} />{state.label}</span>
-      <p className="drawer-explanation">{card.explanation}</p>
-      <div className="drawer-section"><h3>כלל הסיווג</h3><ul>{(rules[card.key] ?? []).map((rule) => <li key={rule}>{rule}</li>)}</ul></div>
-      {signal && <div className="drawer-section"><h3>ערכי החישוב</h3><dl className="details-grid">{Object.entries(signal.value).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{typeof value === 'number' ? numberLabel(value, 3) : value ?? '—'}</dd></div>)}</dl></div>}
-      <div className="drawer-section provenance"><h3>מקור ותזמון</h3><p>{card.source}</p><p>תאריך תצפית: {dateLabel(card.observedAt)}</p><p>קליטה אחרונה: {dateLabel(typeof card.details.sourceFetchedAt === 'string' ? card.details.sourceFetchedAt : null)}</p>{card.sourceUrl !== '#' && <a href={card.sourceUrl} target="_blank" rel="noreferrer">פתיחת המקור הרשמי ↗</a>}</div>
+      <details className="drawer-technical"><summary>הנתון מאחורי הקלעים</summary>
+        <div className="drawer-section"><h3>כלל הסיווג</h3><ul>{(rules[card.key] ?? []).map((rule) => <li key={rule}>{rule}</li>)}</ul></div>
+        {signal && <div className="drawer-section"><h3>ערכי החישוב</h3><dl className="details-grid">{Object.entries(signal.value).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{typeof value === 'number' ? numberLabel(value, 3) : value ?? '—'}</dd></div>)}</dl></div>}
+        <div className="drawer-section provenance"><h3>מקור ותזמון</h3><p>{card.source}</p><p>תאריך תצפית: {dateLabel(card.observedAt)}</p><p>קליטה אחרונה: {dateLabel(typeof card.details.sourceFetchedAt === 'string' ? card.details.sourceFetchedAt : null)}</p>{card.sourceUrl !== '#' && <a href={card.sourceUrl} target="_blank" rel="noreferrer">פתיחת המקור הרשמי ↗</a>}</div>
+      </details>
     </section>
   </div>;
 }
@@ -176,8 +189,8 @@ function YieldCurvePanel({ real, nominal }: { real: YieldPoint[]; nominal: Yield
   const curve = useMemo(() => makeCurveChart(real, nominal), [real, nominal]);
   if (!curve.values.length) return <section className="panel chart-panel"><div className="panel-title"><div><span className="eyebrow">עקום ממשלתי</span><h2>תשואה לפי טווח לפדיון</h2></div><span className="source-empty">ממתין לעדכון מקור רשמי</span></div><EmptyChart /></section>;
   return <section className="panel chart-panel">
-    <div className="panel-title"><div><span className="eyebrow">עקום ממשלתי</span><h2>תשואה לפי טווח לפדיון</h2><p>עקום אפס של בנק ישראל · ממוצעים המתפרסמים בקובץ המקור</p></div><div className="chart-date">תצפית אחרונה <b>{dateLabel(curve.latestDate)}</b></div></div>
-    <div className="chart-legend"><span><i className="legend-line nominal" />נומינלית</span><span><i className="legend-line real" />ריאלית</span>{curve.previousDate && <span><i className="legend-line previous" />תצפית קודמת זמינה</span>}</div>
+    <div className="panel-title"><div><span className="eyebrow">עקום ממשלתי</span><h2>תשואה לפי טווח לפדיון <ConceptExplainer concept="yieldCurve" /></h2><p>עקום אפס של בנק ישראל · ממוצעים המתפרסמים בקובץ המקור</p></div><div className="chart-date">תצפית אחרונה <b>{dateLabel(curve.latestDate)}</b></div></div>
+    <div className="chart-legend"><span><i className="legend-line nominal" />נומינלית <ConceptExplainer concept="nominalYield" /></span><span><i className="legend-line real" />ריאלית <ConceptExplainer concept="realYield" /></span>{curve.previousDate && <span><i className="legend-line previous" />תצפית קודמת זמינה</span>}</div>
     <div className="chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={curve.values} margin={{ top: 12, right: 8, left: 4, bottom: 4 }}>
       <CartesianGrid stroke="#e8edf2" vertical={false} />
       <XAxis dataKey="tenor" axisLine={false} tickLine={false} tick={{ fill: '#738091', fontSize: 12 }} />
@@ -200,9 +213,9 @@ function EmptyChart() { return <div className="empty-chart"><div className="empt
 function InflationPanel({ data }: { data: OverviewResponse['inflation'] }) {
   const chartData = data.observations.slice(-36).map((point) => ({ date: point.observationDate.slice(0, 7), index: point.value }));
   return <section className="panel inflation-panel">
-    <div className="panel-title"><div><span className="eyebrow">נתוני מחירים · הלמ״ס</span><h2>מדד המחירים לצרכן</h2><p>רמת המדד והאינפלציה המחושבת ממנה</p></div><a className="source-link" href="https://www.cbs.gov.il/en/cbsNewBrand/Pages/Api-Indices.aspx" target="_blank" rel="noreferrer">תיעוד API ↗</a></div>
+    <div className="panel-title"><div><span className="eyebrow">אינפלציה · נתונים רשמיים של הלמ״ס</span><h2>אינפלציה ומדד המחירים <ConceptExplainer concept="cpiIndex" /></h2><p>אינפלציה שנתית היא שינוי המחירים ב־12 חודשים; המדד עצמו הוא רמת המחירים.</p></div><a className="source-link" href="https://www.cbs.gov.il/en/cbsNewBrand/Pages/Api-Indices.aspx" target="_blank" rel="noreferrer">תיעוד API ↗</a></div>
     <div className="inflation-stats">
-      <div className="inflation-stat"><span>אינפלציה שנתית</span><b>{data.yoy === null ? '—' : `${numberLabel(data.yoy)}%`}</b><small>לפי 12 חודשי מדד</small></div>
+      <div className="inflation-stat inflation-stat-primary"><span>אינפלציה שנתית <ConceptExplainer concept="inflation" /></span><b>{data.yoy === null ? 'אין נתון שנתי עדכני' : `${numberLabel(data.yoy)}%`}</b><small>{data.yoy === null ? 'לא מוצגת הערכה חלופית' : `לפי 12 חודשי מדד · יעד ${data.targetLow}–${data.targetHigh}%`}</small></div>
       <div className="inflation-stat"><span>שינוי חודשי</span><b>{data.mom === null ? '—' : `${data.mom > 0 ? '+' : ''}${numberLabel(data.mom)}%`}</b><small>לעומת החודש הקודם</small></div>
       <div className="inflation-stat"><span>יעד בנק ישראל</span><b>{data.targetLow}–{data.targetHigh}%</b><small>טווח יעד שנתי</small></div>
       <div className="inflation-stat"><span>חודש מדד אחרון</span><b>{data.observationDate ? dateLabel(data.observationDate) : '—'}</b><small>ללא השלמה לנתון יומי</small></div>
@@ -277,12 +290,15 @@ function BondDetailDrawer({ bond, onClose }: { bond: BondMarketRecord; onClose: 
     <section className="detail-drawer" role="dialog" aria-modal="true" aria-label="פרטי איגרת חוב">
       <button className="close-button" onClick={onClose} aria-label="סגירה">×</button>
       <h2>{bond.issuerNameHe} · סדרה {bond.seriesName}</h2>
+      <div className="drawer-section plain-language"><h3>בשורה אחת</h3><p>זהו סיכום של נתוני איגרת חוב כפי שנמסרו ממקורות הנתונים הזמינים. הנתונים אינם הצעה או דירוג.</p></div>
+      <div className="drawer-section plain-language"><h3>למה זה חשוב</h3><p>תשואה, מועד פירעון ורגישות למח״מ עוזרים לתאר את מאפייני האיגרת; כל ערך נקרא יחד עם תאריך התצפית ואיכות המקור.</p><ConceptExplainer concept="yieldToMaturity" /><ConceptExplainer concept="duration" /></div>
+      <div className="drawer-section plain-language"><h3>איך לחשוב על זה</h3><p>משווים איגרות עם מאפייני פירעון והצמדה דומים, ובודקים גם את מחיר השוק, עדכניות הציטוט והנחות החישוב. אין ערך יחיד שמתאר לבדו את כל הסיכון.</p></div>
       {detailLoading && <p role="status">טוען נתונים…</p>}
       {detailError && <div className="error-banner" role="alert"><div><b>לא ניתן לטעון את נתוני האיגרת</b><p>{detailError}</p></div></div>}
-      <h3>נתוני האיגרת</h3>
+      <details className="drawer-technical"><summary>הנתון מאחורי הקלעים</summary><h3>נתוני האיגרת</h3>
       <dl className="details-grid">{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value ?? notAvailable}</dd></div>)}</dl>
       <h3>השוואה יחסית</h3>
-      <p>תשואת ממשלה מקבילה: {bond.benchmarkYield ?? notAvailable}{bond.benchmarkYield === null ? '' : '%'} · איכות התאמה: {bond.benchmarkQuality} · מרווח: {bond.spreadBp ?? notAvailable}{bond.spreadBp === null ? '' : ' נ״ב'} · מרווח למח״מ: {bond.spreadPerDuration ?? notAvailable}{bond.spreadPerDuration === null ? '' : ' נ״ב לשנה'}</p>
+      <p>תשואת ממשלה מקבילה: {bond.benchmarkYield ?? notAvailable}{bond.benchmarkYield === null ? '' : '%'} · איכות התאמה: {bond.benchmarkQuality} · מרווח: {bond.spreadBp ?? notAvailable}{bond.spreadBp === null ? '' : ' נ״ב'} · מרווח למח״מ: {bond.spreadPerDuration ?? notAvailable}{bond.spreadPerDuration === null ? '' : ' נ״ב לשנה'}</p><p><ConceptExplainer concept="spread" /> <ConceptExplainer concept="basisPoints" /></p>
       <p>מרווח למח״מ הוא מדד השוואתי לא תקני; הוא אינו OAS, Z-spread או מדד אשראי תקני.</p>
       <h3>היסטוריית מסחר</h3>
       <div className="bond-filters">{['1M', '3M', '6M', '1Y', 'MAX'].map((window) => <button key={window} onClick={() => setPeriod(window)} aria-pressed={period === window}>{window}</button>)}</div>
@@ -291,7 +307,7 @@ function BondDetailDrawer({ bond, onClose }: { bond: BondMarketRecord; onClose: 
       <h3>לוח תשלומי ריבית וקרן</h3>
       {cashflows.length > 0 ? cashflows.map((flow, index) => <p key={`${flow.paymentDate}-${index}`}>{flow.paymentDate} · ריבית {flow.couponAmount ?? notAvailable} · שיעור פירעון קרן {flow.principalPercentage ?? notAvailable}%</p>) : <p>אין לוח תשלומים מאומת ממקור נתונים.</p>}
       <h3>סיכוני נתונים ומקור</h3>
-      <p>{bond.collateralSummary ?? 'לא נמסר מידע על בטוחות'} · מצב הציטוט: {bond.stale ? 'מיושן' : 'עדכני'} · מקור: {bond.sourceUrl ?? 'ממתין למקור מורשה'} · תאריך תצפית: {bond.observationDate ?? notAvailable}</p>
+      <p>{bond.collateralSummary ?? 'לא נמסר מידע על בטוחות'} · מצב הציטוט: {bond.stale ? 'מיושן' : 'עדכני'} · מקור: {bond.sourceUrl ?? 'ממתין למקור מורשה'} · תאריך תצפית: {bond.observationDate ?? notAvailable}</p></details>
     </section>
   </div>;
 }
@@ -336,15 +352,16 @@ function BondScreener({ data, governmentCurves }: { data: OverviewResponse['bond
   const columns: Array<{ label: string; sort: keyof BondMarketRecord; help?: string }> = [
     { label: 'מנפיק', sort: 'issuerNameHe' }, { label: 'סדרה', sort: 'seriesName' },
     { label: 'הצמדה', sort: 'linkageType' }, { label: 'קופון', sort: 'couponRate', help: 'הקופון הוא הריבית החוזית של האיגרת; התשואה לפדיון מושפעת גם ממחיר השוק.' },
-    { label: 'תשואה לפדיון', sort: 'ytm' }, { label: 'מח״מ', sort: 'duration' },
+    { label: 'תשואה לפדיון', sort: 'ytm', help: 'מדד תשואה מחושב לפי מחיר ותשלומים צפויים, תחת הנחות החישוב; אין זו תשואה מובטחת.' }, { label: 'מח״מ', sort: 'duration', help: 'מדד של תזמון תזרימי האיגרת ורגישות מחירה לשינוי בתשואה.' },
     { label: 'אג״ח ממשלתית מקבילה', sort: 'benchmarkQuality' }, { label: 'תשואת ממשלה', sort: 'benchmarkYield' },
-    { label: 'מרווח (נ״ב)', sort: 'spreadBp' }, { label: 'שינוי יומי (נ״ב)', sort: 'spreadChange1dBp' },
+    { label: 'מרווח (נ״ב)', sort: 'spreadBp', help: 'הפרש בין תשואת האיגרת לתשואת ממשלה מקבילה; ההשוואה תלויה בהתאמת הטווח.' }, { label: 'שינוי יומי (נ״ב)', sort: 'spreadChange1dBp' },
     { label: 'שינוי שבועי (נ״ב)', sort: 'spreadChange5dBp' }, { label: 'מרווח למח״מ', sort: 'spreadPerDuration', help: 'מדד השוואתי לא תקני; אינו OAS או Z-spread.' },
     { label: 'מחזור מסחר', sort: 'tradingVolume' }, { label: 'מועד תצפית וגיל ציטוט', sort: 'observationDate' },
   ];
 
   return <section className="panel bond-screener" dir="rtl">
     <div className="panel-title"><div><span className="eyebrow">שלב 1ג · השוואת ערך יחסי</span><h2>איגרות חוב לתשתיות — השוואת ערך יחסי</h2><p>הקופון והתשואה לפדיון מוצגים בנפרד. מרווח למח״מ הוא מדד השוואתי לא תקני, ולא מדד OAS או Z-spread.</p></div><a className="source-link" href={data.sourceUrl} target="_blank" rel="noreferrer">פרטי מקור ורישוי</a></div>
+    <p className="concept-links">הסבר למונח תל־בונד שקלי <ConceptExplainer concept="telBondShekeli" /><span>ההסבר כללי בלבד; הרשימה כאן עוסקת באיגרות תשתית ואינה מציגה נתוני מדד תל־בונד.</span></p>
     <div className="error-banner"><div><b>{data.sourceStatus === 'pending' ? 'מקור נתוני האג״ח ממתין לרישוי' : 'מקור נתוני האג״ח הוגדר'}</b><p>{data.blocker}</p></div></div>
     <div className="inflation-stats">
       <div className="inflation-stat"><span>איגרות תשתית צמודות מדד עם נתון עדכני</span><b>{visible.filter((row) => row.linkageType === 'cpi' && !row.stale).length}</b></div>
@@ -372,6 +389,7 @@ function BondScreener({ data, governmentCurves }: { data: OverviewResponse['bond
       <div className="panel"><h3>מרווח אשראי מול מח״מ · להשוואה</h3>{chartRows.some((row) => row.spreadBp !== null) ? <ResponsiveContainer width="100%" height={260}><ScatterChart><CartesianGrid/><XAxis type="number" dataKey="duration" name="מח״מ" unit=" שנים"/><YAxis type="number" dataKey="spreadBp" name="מרווח" unit=" נ״ב"/><Tooltip cursor={{ strokeDasharray: '3 3' }}/>{data.issuers.map((item, index) => <Scatter key={item.issuerKey} name={item.issuerNameHe} data={chartRows.filter((row) => row.issuerKey === item.issuerKey && row.spreadBp !== null)} fill={['#386f91', '#987d54', '#536f59', '#7f638e', '#63828b'][index % 5]}/>)}</ScatterChart></ResponsiveContainer> : <div className="empty-chart">אין תצפיות מרווח מאומתות להצגה בתרשים.</div>}</div>
     </div>
     <p>מרווח למח״מ (נ״ב לשנת מח״מ) הוא מדד השוואתי לא תקני; הוא אינו OAS, Z-spread או מדד אשראי תקני.</p>
+    <p className="concept-links">הסבר למונחים בטבלה: תשואה לפדיון <ConceptExplainer concept="yieldToMaturity" /> מח״מ <ConceptExplainer concept="duration" /> מרווח <ConceptExplainer concept="spread" /> נ״ב <ConceptExplainer concept="basisPoints" /></p>
     <div style={{ overflowX: 'auto' }}><table className="bond-table"><thead><tr>{columns.map((column) => <th key={column.label} onClick={() => setSort(column.sort)} style={{ cursor: 'pointer' }} title={column.help}>{column.label}</th>)}</tr></thead><tbody>{visible.map((row) => <tr key={row.id} onClick={() => setSelected(row)}><td>{row.issuerNameHe}</td><td>{row.seriesName}</td><td>{row.linkageType === 'cpi' ? 'צמוד מדד' : 'שקלי נומינלי'}</td><td>{money(row.couponRate)}{row.couponRate === null ? '' : '%'}</td><td>{money(row.linkageType === 'cpi' ? (row.realYtm ?? row.ytm) : (row.nominalYtm ?? row.ytm))}{row.ytm === null ? '' : '%'}</td><td>{money(row.duration)}</td><td>{row.benchmarkQuality}</td><td>{money(row.benchmarkYield)}{row.benchmarkYield === null ? '' : '%'}</td><td>{money(row.spreadBp, 1)}</td><td>{money(row.spreadChange1dBp, 1)}</td><td>{money(row.spreadChange5dBp, 1)}</td><td>{money(row.spreadPerDuration, 1)}</td><td>{row.tradingVolume ?? 'לא זמין'}</td><td>{row.observationDate ?? 'אין ציטוט'} · {row.quoteAgeBusinessDays === null ? 'גיל לא זמין' : `${row.quoteAgeBusinessDays} ימי מסחר`}{row.stale ? ' · מיושן' : ''}{row.timestampMismatch ? ' · מועדי התצפית שונים; המרווח משוער' : ''}</td></tr>)}</tbody></table>{visible.length === 0 && <div className="empty-chart"><p>אין נתוני מסחר מאומתים להצגה.</p><span>נתוני המנפיקים אינם ציטוטי שוק. הרשימה אינה מדרגת ואינה ממליצה על איגרות.</span></div>}</div>
     {selected && <BondDetailDrawer bond={selected} onClose={() => setSelected(null)}/>}
   </section>;
@@ -429,6 +447,9 @@ function App() {
   useEffect(() => { void loadData(); }, []);
   const signalByKey = useMemo(() => new Map(data?.signals.map((signal) => [signal.key, signal]) ?? []), [data?.signals]);
   const outlook = useMemo(() => data ? buildOutlookSummary({ regime: data.regime, signals: data.signals, creditContext }) : null, [data, creditContext]);
+  const inflationCard = data?.cards.find((card) => card.key === 'cpi_inflation');
+  const inflationStateLabel = !inflationCard || inflationCard.value === null || inflationCard.status === 'unknown' ? 'אין נתון עדכני' : inflationCard.status === 'green' ? 'תומכת יחסית' : inflationCard.status === 'red' ? 'מכבידה' : 'ניטרלית / מעורבת';
+  const forwardChip = data?.regime.status === 'green' ? 'תמיכה מתונה אם התנאים יימשכו' : data?.regime.status === 'yellow' ? 'תמונה מעורבת' : data?.regime.status === 'red' ? 'לחץ עשוי להימשך' : 'אין כיוון מאומת';
 
 
   return <main className="app-shell">
@@ -442,25 +463,32 @@ function App() {
 
       <section className="regime-panel" aria-labelledby="regime-title">
         <div className="regime-layout">
-          <div className="regime-outlook">
-            <div className="eyebrow">תחזית קדימה · תמונת מצב בישראל</div>
-            <h2 id="regime-title">{outlook?.overallLabel ?? 'מתחבר לנתונים'}</h2>
-            <div className="current-state"><span>מצב נוכחי</span><p>{outlook?.currentState ?? 'ממתין לאיתותים מאומתים.'}</p></div>
-            <div className="base-case"><span>תחזית קדימה — תרחיש בסיס</span><p>{outlook?.baseCaseText ?? 'התרחיש יופיע לאחר טעינת איתותי המקור.'}</p></div>
-            <div className={`credit-outlook credit-outlook-${outlook?.creditStatus === 'זהיר' ? 'cautious' : outlook?.creditStatus === 'מעורב' ? 'mixed' : outlook?.creditStatus === 'תומך' ? 'supportive' : 'unavailable'}`} role="status"><b>אשראי קונצרני: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</b><span>{creditLoading ? 'טוען סיכום נתוני אשראי מבנק ישראל.' : outlook?.creditDetail ?? 'אין כרגע נתוני אשראי זמינים.'}</span></div>
-            <div className="outlook-lists">
-              <div><h3>מסקנות מהמצב הקיים</h3><ul>{(outlook?.conclusionBullets ?? ['ממתין לנתוני מקור.']).map((bullet, index) => <li key={`conclusion-${index}`}>{bullet}</li>)}</ul></div>
-              <div><h3>מה יכול לשנות את התמונה</h3><ul>{(outlook?.riskTriggerBullets ?? ['שינוי באינפלציה ובציפיות לה.','שינוי בתשואות הארוכות.','שינוי בתנאי הסיכון בישראל.']).map((bullet, index) => <li key={`trigger-${index}`}>{bullet}</li>)}</ul></div>
+            <div className="today-block">
+              <div className="eyebrow">תמונת מצב · היום</div>
+              <h2 id="regime-title">איפה אנחנו היום?</h2>
+              <div className="orientation-chips"><span>היום: {outlook?.overallLabel ?? 'ממתין לנתונים'}</span><span>קדימה: {forwardChip}</span></div>
+              <p className="today-regime">{outlook?.currentState ?? 'ממתין לאיתותים מאומתים ממקורות הנתונים.'}</p>
+              <div className="inflation-snapshot"><div><span>אינפלציה היום · {inflationStateLabel}</span><ConceptExplainer concept="inflation" /></div><b>{inflationStateLabel === 'אין נתון עדכני' ? 'אין נתון שנתי עדכני' : `${numberLabel(inflationCard!.value)}%`}</b><p>{inflationStateLabel === 'אין נתון עדכני' ? 'אין תצפית שנתית עדכנית ומאומתת להצגה; לכן לא נקבע אם האינפלציה תומכת או מכבידה.' : inflationCard?.explanation}</p><small>{inflationStateLabel === 'אין נתון עדכני' ? 'ממתין לתצפית שנתית רשמית ועדכנית' : `חודש מדד: ${dateLabel(data?.inflation.observationDate)}`}</small></div>
+              <div className="outlook-lists"><div><h3>מה תומך כרגע בשוק האג״ח</h3><ul>{(outlook?.conclusionBullets ?? ['ממתין לנתוני מקור מאומתים.']).slice(0, 2).map((bullet, index) => <li key={`support-${index}`}>{bullet}</li>)}</ul></div><div><h3>מה עדיין מעיב</h3><ul>{(outlook?.riskTriggerBullets ?? ['שינוי באינפלציה, בתשואות ארוכות או בתנאי הסיכון.']).slice(0, 2).map((bullet, index) => <li key={`risk-${index}`}>{bullet}</li>)}</ul></div></div>
             </div>
-          </div>
+            <div className="forward-block">
+              <div className="eyebrow">מבט קדימה</div><h2>תרחיש בסיס</h2>
+              <p>{outlook?.baseCaseText ?? 'התרחיש יופיע לאחר טעינת איתותי מקור מאומתים.'}</p>
+              <div className="forward-list"><h3>מה יכול לשנות את התמונה</h3><ul>{[
+                'אם המצב הנוכחי נמשך: הכיוון נשאר תלוי בשילוב האינפלציה, הריבית והתשואות הארוכות.',
+                'שיפור אפשרי: האטה באינפלציה לצד התמתנות בתשואות הארוכות.',
+                'החמרה אפשרית: האצה באינפלציה, עלייה בתשואות או הרעה בתנאי הסיכון.',
+              ].map((item) => <li key={item}>{item}</li>)}</ul></div>
+            </div>
+            <div className={`credit-outlook credit-outlook-${outlook?.creditStatus === 'זהיר' ? 'cautious' : outlook?.creditStatus === 'מעורב' ? 'mixed' : outlook?.creditStatus === 'תומך' ? 'supportive' : 'unavailable'}`} role="status"><b>אשראי קונצרני: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</b><span>{creditLoading ? 'טוען סיכום נתוני אשראי מבנק ישראל.' : outlook?.creditDetail ?? 'אין כרגע נתוני אשראי זמינים.'}</span></div>
           <aside className="regime-rail" aria-label="סיכום איתותים">
-            <div className="legacy-regime"><span>סיווג משוקלל נוכחי</span><b>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</b></div>
+            <div className="legacy-regime"><span>מצב כולל · היום</span><b>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</b></div>
             <div className="regime-stats">
               <div className="regime-stat"><b>{data?.regime.green ?? '—'}</b><span><i className="dot-green" />חיוביים</span></div>
               <div className="regime-stat"><b>{data?.regime.yellow ?? '—'}</b><span><i className="dot-yellow" />מעורבים</span></div>
               <div className="regime-stat"><b>{data?.regime.red ?? '—'}</b><span><i className="dot-red" />שליליים</span></div>
             </div>
-            <div className="confidence-stat"><span>רמת ביטחון</span><b>{outlook?.confidenceLabel ?? 'ממתין'}</b><div className="confidence-meter"><i style={{ width: data ? `${data.regime.coveragePct}%` : '0%' }} /></div><span>כיסוי איתותים</span><b>{data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'}</b></div>
+            <div className="confidence-stat"><span>רמת ביטחון <ConceptExplainer concept="confidence" /></span><b>{outlook?.confidenceLabel ?? 'ממתין'}</b><div className="confidence-meter"><i style={{ width: data ? `${data.regime.coveragePct}%` : '0%' }} /></div><span>כיסוי איתותים <ConceptExplainer concept="signalCoverage" /></span><b>{data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'}</b></div>
           </aside>
         </div>
         <div className="regime-foot"><span>משוקלל לפי הגדרות מרכזיות · מידע חסר אינו נחשב ניטרלי</span><span>עדכון: {dateLabel(data?.generatedAt)}</span></div>
@@ -468,6 +496,7 @@ function App() {
 
       <div className="section-heading"><div><span className="eyebrow">מנוע איתותים · שקוף ומתועד</span><h2>ששת מדדי הליבה</h2></div><span className="heading-note"><span className="info-mark">i</span>לחיצה על כרטיס מציגה את כלל הסיווג והמקור</span></div>
       <section className="cards-grid" aria-label="ששת מדדי הליבה">{data?.cards.map((card) => <MacroCardView key={card.key} card={card} onOpen={setSelected} />) ?? Array.from({ length: 6 }, (_, index) => <div className="card-skeleton" key={index}><span /><i /><b /><small /></div>)}</section>
+      <section className="panel inflation-feature" aria-label="תמונת מצב האינפלציה"><InflationPanel data={data?.inflation ?? { latestIndex: null, mom: null, yoy: null, previousYoy: null, observationDate: null, targetLow: 1, targetHigh: 3, observations: [] }} /></section>
 
       <section className="panel">
         <div className="panel-title"><div><span className="eyebrow">הקשר שוק בינלאומי</span><h2>שערי חליפין, תשואות ארצות הברית ופער התשואות הריאליות</h2></div></div>
@@ -476,10 +505,10 @@ function App() {
         <div className="inflation-stats">{data && [data.markets.usdIls, data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={`${series.key}-changes`}><span>שינויים זמינים · {seriesLabel(series.key)}</span>{Object.entries(series.changes).map(([key, value]) => <small key={key}>{changeLabel(key)}: {value === null ? 'אין תצפית להשוואה' : `${numberLabel(value, 2)} ${marketUnitLabel(series.unit)}`}</small>)}<small>מקור: <a href={series.sourceUrl} target="_blank" rel="noreferrer">{series.source}</a> · מצב: {marketStatusLabel(series.status)}</small></div>)}</div>
         <p>{data?.markets.riskProxy.label}: {data?.markets.riskProxy.components.map((component) => `${seriesLabel(component.key)} ${component.value === null ? 'אין נתון' : numberLabel(component.value, 2)} ${marketUnitLabel(component.unit)} (${REGIME_STATUS_HE[component.status]}, ${component.sourceObservationDate ?? 'ללא תאריך'})`).join(' · ')}</p>
       </section>
-      <section className="panel"><div className="panel-title"><div><span className="eyebrow">פרסום בנק ישראל</span><h2>ציפיות אינפלציה</h2></div><span>{dateLabel(data?.expectations.publicationDate)}</span></div><div className="inflation-stats">{data?.expectations.items.map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)}</span><b>{series.value === null ? 'אין עדיין תצפית' : `${numberLabel(series.value)}%`}</b><small>{dateLabel(series.observationDate)} · {series.source}</small><small>מצב מקור: {marketStatusLabel(series.status)}</small></div>)}</div></section>
+      <section className="panel"><div className="panel-title"><div><span className="eyebrow">פרסום בנק ישראל</span><h2>ציפיות אינפלציה <ConceptExplainer concept="inflationExpectations" /></h2></div><span>{dateLabel(data?.expectations.publicationDate)}</span></div><div className="inflation-stats">{data?.expectations.items.map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)}</span><b>{series.value === null ? 'אין עדיין תצפית' : `${numberLabel(series.value)}%`}</b><small>{dateLabel(series.observationDate)} · {series.source}</small><small>מצב מקור: {marketStatusLabel(series.status)}</small></div>)}</div></section>
       <CreditPanel summary={creditSummary} summaryLoading={creditLoading} />
       {data && <BondScreener data={data.bondScreener} governmentCurves={data.curves} />}
-      <section className="two-column" id="curves"><YieldCurvePanel real={data?.curves.real ?? []} nominal={data?.curves.nominal ?? []} /><InflationPanel data={data?.inflation ?? { latestIndex: null, mom: null, yoy: null, previousYoy: null, observationDate: null, targetLow: 1, targetHigh: 3, observations: [] }} /></section>
+      <section className="panel" id="curves"><YieldCurvePanel real={data?.curves.real ?? []} nominal={data?.curves.nominal ?? []} /></section>
 
       <section className="panel"><div className="panel-title"><div><span className="eyebrow">תצפיות מצב יומיות</span><h2>היסטוריית מצב הסביבה</h2></div></div><RegimeHistoryChart rows={data?.regimeHistory ?? []}/><div className="source-list">{data?.regimeHistory.map((row) => <div className="source-row" key={row.date}><span>{row.date}</span><b>{REGIME_STATUS_HE[row.status]} · מדד {numberLabel(row.score, 3)} · שלמות נתונים {numberLabel(row.coveragePct, 0)}%</b><span>חיוביים {row.green} / מעורבים {row.yellow} / שליליים {row.red} · גורם תומך: {row.topPositive ?? 'אין'} · גורם מכביד: {row.topNegative ?? 'אין'}</span></div>)}</div></section>
 
