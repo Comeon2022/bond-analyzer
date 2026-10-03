@@ -278,5 +278,5 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npm test`: passed (66 tests across 13 files), including unchanged shared deterministic outlook tests.
 - `npm run build`: passed.
 - `npx wrangler deploy --dry-run`: passed; this frontend-only phase requires no Worker deployment.
-- Pages rollout and implementation commit SHA will be appended after pushing.
+- Implementation commit `71bda4d6fd5bffa806adb85e6f1a5d282f348641` (`Clarify top status and USD ILS labels`) was pushed to `origin/main`. The Git-triggered Pages deployment reported source `71bda4d` but the production alias initially served the previous bundle, so the verified local build was published directly to Pages project `bond-analyzer` on `main`. Deployment `b8e1b4da-1dab-457d-8d45-fa353506fa9d` is available at `https://b8e1b4da.bond-analyzer-av2.pages.dev`. The production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-CtjZL927.js` and `index-j3zxN34W.css`; UTF-8 checks confirmed the `דולר / שקל` and `מצב כולל היום` labels, the plain-language USD/ILS explanation, and the new status/narrative layout CSS.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; RAGOps was not accessed or modified. User-provided specs/CSV files remain unstaged.
