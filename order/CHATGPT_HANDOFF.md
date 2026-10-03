@@ -243,3 +243,21 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Cloudflare Pages production deployment `bba2b3b7-81f9-4881-9cbb-9d9a3fad2535` published source commit `11f6f05` on `main` for project `bond-analyzer` / `bond-analyzer-av2.pages.dev`. Both the production alias and deployment-specific URL returned HTTP 200; the JavaScript and stylesheet returned HTTP 200. The delivered JavaScript decodes as UTF-8 and contains the new “איפה אנחנו היום”, “מבט קדימה”, inflation snapshot, explainer, and drawer labels; deployed CSS contains the responsive RTL hero rules and explainer styling. No live market observations were added or used for UI copy.
 - Repository target verified as `bond-analyzer`, `origin https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified.
 - Implementation commit: `fde17c8018fdf51e8ae4807dcb8fa832c57cbdd2` (`Improve dashboard clarity and explainers`), pushed to `origin/main`; final RTL grid adjustment `11f6f05daf29eba1eabb8fa569652413f1736e3f` (`Preserve RTL in briefing grid`) is also pushed and deployed to Pages production.
+
+## Phase 1I hero clarity and explainer overflow fix — 2026-10-03
+
+### Implemented
+
+- Replaced the two hero list labels with `מה עוזר כרגע לאג״ח` and `מה עדיין לוחץ על השוק`. Added `src/lib/hero-evidence.ts` to express verified current CPI, policy-rate, long-yield, local-risk-proxy, and aggregate-credit signal states as concrete Hebrew sentences that connect the topic and direction to a possible bond-market effect. Unknown signals are omitted, each list is capped at three items, and explicit empty-state copy avoids claiming that missing evidence is support. Macro outlook, regime scoring, counts, coverage, and credit rail logic are unchanged.
+- Reorganized the metric card hierarchy so its plain-language interpretation appears before the sparkline and emphasized the interpretation with a distinct background, border, spacing, and typography. Refined hero list spacing/dividers, mobile stacking, and secondary rail styling.
+- Replaced the inline `<details>` explainer panel with a reusable `document.body` portal containing a native `<dialog>` opened with `showModal()`. This uses the browser top layer, outside the card/grid clipping and stacking contexts. Native dialog behavior supplies modal focus handling and focus restoration; the close control is focused on open, Escape uses `cancel`, backdrop clicks close, and the trigger exposes `aria-haspopup`, `aria-expanded`, `aria-controls`, and an accessible label. The dialog is RTL, scrollable, keyboard-operable, has visible focus styling, and becomes a bottom sheet on narrow screens.
+- Added hero evidence tests for state/implication text and omitted unknown evidence, plus component tests for clear hero labels, portal separation, modal/RTL/screen-reader semantics, Escape/outside-close callbacks, and retained concept content. No LLM text, fabricated observations, or recommendation language was added.
+
+### Verification and rollout
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (64 tests across 13 files).
+- `npm run build`: passed.
+- `npx wrangler deploy --dry-run`: passed; Wrangler resolved the configured dashboard D1 and asset bindings. No Worker behavior or API contract changed, so no Worker deployment was needed.
+- Pages production rollout and source commit verification are to be recorded after pushing this implementation.
+- Repository identity verified as `bond-analyzer`, `origin https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. RAGOps was not accessed or modified. User-provided specs/CSV files under `order/` and the repository root are not task changes and must remain unstaged.

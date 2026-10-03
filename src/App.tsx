@@ -10,6 +10,7 @@ import { ApiError, apiGet, getApiHealth, getCreditSummary, getOverview } from '.
 import type { BondBenchmarkResponse, BondDetailResponse, BondHistoryResponse, CreditSummaryResponse } from './lib/api-types';
 import { loadMacroAndCreditIndependently } from './lib/dashboard-loader';
 import { normalizeCreditOutlookContext } from './lib/credit-outlook';
+import { buildHeroEvidence } from './lib/hero-evidence';
 import CreditPanel from './CreditPanel';
 import ConceptExplainer from './components/ConceptExplainer';
 import { CONCEPT_EXPLANATIONS, type ConceptExplanation, type ConceptId } from './lib/concepts';
@@ -114,8 +115,8 @@ function MacroCardView({ card, onOpen }: { card: MacroCard; onOpen: (card: Macro
       {card.key === 'long_yield_momentum' && <div className="metric-caption">תנועה בתקופת מקור של כחודש</div>}
       {delta && <div className={`metric-delta ${delta.className}`}>{delta.text}</div>}
       {!delta && card.pending && <div className="metric-delta">מקור רשמי טרם חובר</div>}
-      <div className="sparkline-wrap"><Sparkline data={card.history} status={card.status} /></div>
       <div className="card-explanation">{card.explanation}</div>
+      <div className="sparkline-wrap"><Sparkline data={card.history} status={card.status} /></div>
       <div className="card-footer"><span>{sourceAvailable ? card.source : 'מקור בתהליך'}</span><span>{dateLabel(card.observedAt)}</span></div>
       <button className="card-detail-button" onClick={() => onOpen(card)}>לקריאה פשוטה ולנתוני המקור</button>
     </article>
@@ -450,6 +451,7 @@ function App() {
   const inflationCard = data?.cards.find((card) => card.key === 'cpi_inflation');
   const inflationStateLabel = !inflationCard || inflationCard.value === null || inflationCard.status === 'unknown' ? 'אין נתון עדכני' : inflationCard.status === 'green' ? 'תומכת יחסית' : inflationCard.status === 'red' ? 'מכבידה' : 'ניטרלית / מעורבת';
   const forwardChip = data?.regime.status === 'green' ? 'תמיכה מתונה אם התנאים יימשכו' : data?.regime.status === 'yellow' ? 'תמונה מעורבת' : data?.regime.status === 'red' ? 'לחץ עשוי להימשך' : 'אין כיוון מאומת';
+  const heroEvidence = buildHeroEvidence({ signals: data?.signals ?? [], cards: data?.cards ?? [], creditStatus: creditLoading ? null : outlook?.creditStatus ?? null });
 
 
   return <main className="app-shell">
@@ -464,12 +466,12 @@ function App() {
       <section className="regime-panel" aria-labelledby="regime-title">
         <div className="regime-layout">
             <div className="today-block">
-              <div className="eyebrow">תמונת מצב · היום</div>
+              <div className="eyebrow">היום · תמונת מצב</div>
               <h2 id="regime-title">איפה אנחנו היום?</h2>
               <div className="orientation-chips"><span>היום: {outlook?.overallLabel ?? 'ממתין לנתונים'}</span><span>קדימה: {forwardChip}</span></div>
               <p className="today-regime">{outlook?.currentState ?? 'ממתין לאיתותים מאומתים ממקורות הנתונים.'}</p>
               <div className="inflation-snapshot"><div><span>אינפלציה היום · {inflationStateLabel}</span><ConceptExplainer concept="inflation" /></div><b>{inflationStateLabel === 'אין נתון עדכני' ? 'אין נתון שנתי עדכני' : `${numberLabel(inflationCard!.value)}%`}</b><p>{inflationStateLabel === 'אין נתון עדכני' ? 'אין תצפית שנתית עדכנית ומאומתת להצגה; לכן לא נקבע אם האינפלציה תומכת או מכבידה.' : inflationCard?.explanation}</p><small>{inflationStateLabel === 'אין נתון עדכני' ? 'ממתין לתצפית שנתית רשמית ועדכנית' : `חודש מדד: ${dateLabel(data?.inflation.observationDate)}`}</small></div>
-              <div className="outlook-lists"><div><h3>מה תומך כרגע בשוק האג״ח</h3><ul>{(outlook?.conclusionBullets ?? ['ממתין לנתוני מקור מאומתים.']).slice(0, 2).map((bullet, index) => <li key={`support-${index}`}>{bullet}</li>)}</ul></div><div><h3>מה עדיין מעיב</h3><ul>{(outlook?.riskTriggerBullets ?? ['שינוי באינפלציה, בתשואות ארוכות או בתנאי הסיכון.']).slice(0, 2).map((bullet, index) => <li key={`risk-${index}`}>{bullet}</li>)}</ul></div></div>
+              <div className="outlook-lists"><div><h3>מה עוזר כרגע לאג״ח</h3><ul>{(heroEvidence.helps.length ? heroEvidence.helps : ['אין כרגע איתות מאומת שמראה מה עוזר לאג״ח; איתותים חסרים אינם נחשבים לתמיכה.']).map((bullet, index) => <li key={`support-${index}`}>{bullet}</li>)}</ul></div><div><h3>מה עדיין לוחץ על השוק</h3><ul>{(heroEvidence.pressures.length ? heroEvidence.pressures : ['לא זוהה כרגע איתות מאומת שמצביע על לחץ בתחומים שנבדקו; אין בכך הבטחה שהתשואות ירדו.']).map((bullet, index) => <li key={`pressure-${index}`}>{bullet}</li>)}</ul></div></div>
             </div>
             <div className="forward-block">
               <div className="eyebrow">מבט קדימה</div><h2>תרחיש בסיס</h2>
