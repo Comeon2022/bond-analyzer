@@ -297,5 +297,5 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npm test`: passed (66 tests across 13 files).
 - `npm run build`: passed.
 - `npx wrangler deploy --dry-run`: passed; no Worker/API changes require deployment.
-- Pages rollout and commit SHA will be recorded after push.
+- Implementation commit `2bff3a8ac6248bb8a4878dda9700df83345f9d56` (`Rebuild hero as compact executive brief`) was pushed to `origin/main`. The Git-triggered Pages deployment reported source `2bff3a8` but initially served the prior bundle, so the verified local `dist/` build was published directly to Pages project `bond-analyzer` on `main`. Deployment `bbfd7086-abec-4313-9d25-6cc4c48b6d56` is available at `https://bbfd7086.bond-analyzer-av2.pages.dev`. The production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-DvxkuKqC.js` and `index-lBRUhuHh.css`; UTF-8 content checks confirmed the executive brief, compact support label, inflation line, and two-column/status CSS.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; RAGOps was not accessed or modified. User-provided specs/CSV files remain unstaged.
