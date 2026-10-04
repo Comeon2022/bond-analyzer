@@ -412,4 +412,4 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
   ```
 
 - Repository verified before rollout: `bond-analyzer`, branch `main`, origin `https://github.com/Comeon2022/bond-analyzer.git`. RAGOps was not accessed. User-provided specs/CSV fixtures remain unstaged.
-- Implementation commit SHA: pending.
+- Implementation commit SHA: 0a53102e3b8bec01a2329530bd5622d314dcdfdf (Use official Treasury yield feeds).
