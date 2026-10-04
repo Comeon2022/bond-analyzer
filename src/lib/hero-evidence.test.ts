@@ -41,4 +41,21 @@ describe('plain-language hero evidence', () => {
     expect(evidence.pressures.length).toBeLessThanOrEqual(3);
     expect(evidence.pressures.join(' ')).not.toMatch(/לקנות|למכור|מומלץ|כדאי/);
   });
+
+  it('adds at most one material fresh USD/ILS bullet and suppresses it when stale', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const usdIls = {
+      key: 'usd_ils', value: 3.7, unit: 'ILS', observationDate: today, sourceTimestamp: today,
+      source: 'בנק ישראל', sourceUrl: '#', status: 'ok' as const,
+      changes: { '20dPct': 1.6 }, history: [],
+    };
+    const input = { cards: [], signals: [], creditStatus: null, usdIls };
+    const evidence = buildHeroEvidence(input);
+    const fxBullets = [...evidence.helps, ...evidence.pressures].filter((line) => line.includes('ב־20 ימי מסחר'));
+    expect(fxBullets).toHaveLength(1);
+    expect(fxBullets[0]).toContain('1.6%');
+    expect(fxBullets[0]).toContain('השקל נחלש');
+    const stale = buildHeroEvidence({ ...input, usdIls: { ...usdIls, observationDate: '2020-01-01' } });
+    expect([...stale.helps, ...stale.pressures].some((line) => line.includes('ב־20 ימי מסחר'))).toBe(false);
+  });
 });

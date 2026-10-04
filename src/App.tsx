@@ -12,6 +12,7 @@ import { loadMacroAndCreditIndependently } from './lib/dashboard-loader';
 import { normalizeCreditOutlookContext } from './lib/credit-outlook';
 import { buildHeroEvidence } from './lib/hero-evidence';
 import { getCoreCardSummary } from './lib/card-plain-language';
+import { classifyUsdIlsTrend, usdIlsChartHistory, usdIlsDirection, usdIlsInterpretation, usdIlsIsFresh, usdIlsRange, usdIlsTrendLabel, USDILS_CHART_RANGES, USDILS_RANGE_HIGH_POSITION_MIN, USDILS_RANGE_LOW_POSITION_MAX, USDILS_RANGE_SESSIONS, type UsdIlsTrend } from './lib/usdils';
 import CreditPanel from './CreditPanel';
 import ConceptExplainer from './components/ConceptExplainer';
 import { CONCEPT_EXPLANATIONS, type ConceptExplanation, type ConceptId } from './lib/concepts';
@@ -63,6 +64,75 @@ function changeLabel(key: string): string {
 
 function marketUnitLabel(unit: string): string {
   return unit.replace('sessions', 'ימי מסחר').replace('source period', 'תקופת המקור').replace('comparable period', 'תקופת ההשוואה').replace('bp', 'נ״ב').replace('month', 'חודש');
+}
+
+export function usdIlsMoveText(changePct: number | null): string {
+  const direction = usdIlsDirection(changePct);
+  if (direction === 'unavailable') return 'אין תצפית להשוואה';
+  if (direction === 'unchanged') return 'כמעט ללא שינוי';
+  const amount = numberLabel(Math.abs(changePct!), 2);
+  return `הדולר ${changePct! > 0 ? 'עלה' : 'ירד'} ${amount}% — השקל ${direction === 'weakened' ? 'נחלש' : 'התחזק'}`;
+}
+
+function usdIlsTrendClass(trend: UsdIlsTrend): string {
+  if (trend === 'strengthening') return 'positive';
+  if (trend === 'weakening') return 'negative';
+  if (trend === 'insufficient') return 'unknown';
+  return 'caution';
+}
+
+export function UsdIlsPanel({ series }: { series: OverviewResponse['markets']['usdIls'] }) {
+  const [range, setRange] = useState<(typeof USDILS_CHART_RANGES)[number]['id']>('1M');
+  const fresh = usdIlsIsFresh(series);
+  const classifiedTrend = classifyUsdIlsTrend(series);
+  const trend = fresh ? classifiedTrend : 'insufficient';
+  const primaryChange = series.changes['20dPct'] ?? series.changes['5dPct'] ?? series.changes['60dPct'] ?? null;
+  const primaryDirection = fresh ? usdIlsDirection(primaryChange) : 'unavailable';
+  const directionLabel = primaryDirection === 'strengthened' ? 'השקל התחזק' : primaryDirection === 'weakened' ? 'השקל נחלש' : primaryDirection === 'unchanged' ? 'כמעט ללא שינוי' : 'אין מספיק נתונים';
+  const chartRange = USDILS_CHART_RANGES.find((item) => item.id === range)!;
+  const chartHistory = usdIlsChartHistory(series.history, chartRange.sessions);
+  const range20 = usdIlsRange(series.history, USDILS_RANGE_SESSIONS.short);
+  const range60 = usdIlsRange(series.history, USDILS_RANGE_SESSIONS.long);
+  const valuePosition = (band: { low: number; high: number } | null) => band && series.value !== null && band.high > band.low
+    ? (series.value - band.low) / (band.high - band.low)
+    : null;
+  const position60 = valuePosition(range60);
+  const rangeContext = position60 === null ? null : position60 <= USDILS_RANGE_LOW_POSITION_MAX
+    ? 'השער בחלק התחתון של הטווח ב־60 ימי המסחר האחרונים.'
+    : position60 >= USDILS_RANGE_HIGH_POSITION_MIN ? 'השער בחלק העליון של הטווח ב־60 ימי המסחר האחרונים.' : 'השער באמצע הטווח ב־60 ימי המסחר האחרונים.';
+  const rate = series.value === null ? 'אין שער זמין' : numberLabel(series.value, 4);
+  const chartData = chartHistory?.map((point) => ({ date: point.observationDate.slice(0, 10), rate: point.value })) ?? [];
+  const horizons = [
+    { key: '1dPct', label: 'יום' }, { key: '5dPct', label: '5 ימי מסחר' },
+    { key: '20dPct', label: '20 ימי מסחר' }, { key: '60dPct', label: '60 ימי מסחר' },
+  ];
+  const interpretation = usdIlsInterpretation(trend, fresh);
+
+  return <section className="usdils-panel" aria-labelledby="usdils-title">
+    <div className="usdils-heading"><div><h3 id="usdils-title">דולר / שקל <ConceptExplainer concept="usdIls" /></h3><p>שער הדולר מול השקל ומגמת השקל</p></div><div className="usdils-badges"><span className={`usdils-direction ${usdIlsTrendClass(trend)}`}>{directionLabel}</span><span className={`usdils-trend ${usdIlsTrendClass(trend)}`}>מגמה: {usdIlsTrendLabel(trend)}</span></div></div>
+    <div className="usdils-snapshots">
+      <div className="usdils-snapshot usdils-current"><span>שער נוכחי</span><b>{rate}</b><small>שקלים לדולר · {series.observationDate ? dateLabel(series.observationDate) : 'ממתין לתצפית'}</small></div>
+      {['5dPct', '20dPct', '60dPct'].map((key) => <div className="usdils-snapshot" key={key}><span>שינוי {key.slice(0, key.indexOf('d'))} ימי מסחר</span><b>{series.changes[key] == null ? '—' : `${numberLabel(Math.abs(series.changes[key]!), 2)}%`}</b><small>{usdIlsMoveText(series.changes[key] ?? null)}</small></div>)}
+    </div>
+    <div className="usdils-horizons" aria-label="שינויים לפי תקופה">{horizons.map(({ key, label }) => {
+      const change = series.changes[key] ?? null;
+      return <div className="usdils-horizon" key={key}><b>{label}</b><span>{change === null ? '—' : `${change > 0 ? '+' : ''}${numberLabel(change, 2)}%`}</span><small>{usdIlsMoveText(change)}</small></div>;
+    })}</div>
+    {!fresh && <p className="usdils-freshness" role="status">{series.observationDate ? 'נתון דולר/שקל אינו עדכני מספיק כדי להסיק על המצב הנוכחי.' : 'אין כרגע נתון דולר/שקל מאומת.'} · מקור: {series.source} · מצב מקור: {marketStatusLabel(series.status)}</p>}
+    {fresh && <p className="usdils-freshness">תצפית אחרונה: {dateLabel(series.observationDate)} · מקור: {series.source} ({marketStatusLabel(series.status)})</p>}
+    {fresh && interpretation && <div className="usdils-interpretation"><b>מה זה אומר כרגע?</b><p>{interpretation}</p><small>השער עשוי להשפיע דרך מחירי יבוא, אינפלציה ותנאי סיכון; הקשר לשוק האג״ח אינו קבוע.</small></div>}
+    <div className="usdils-context">
+      <b>טווח אחרון</b>
+      <div>{range20 ? <span>20 ימי מסחר: {numberLabel(range20.low, 4)}–{numberLabel(range20.high, 4)}</span> : <span>טווח 20 ימים: אין מספיק היסטוריה</span>}{range60 ? <span>60 ימי מסחר: {numberLabel(range60.low, 4)}–{numberLabel(range60.high, 4)}</span> : <span>טווח 60 ימים: אין מספיק היסטוריה</span>}</div>
+      {rangeContext && <small>{rangeContext}</small>}
+    </div>
+    <div className="usdils-chart-heading"><b>היסטוריית השער</b><div className="usdils-range-controls" aria-label="טווח הגרף">{USDILS_CHART_RANGES.map((item) => {
+      const supported = series.history.length > item.sessions;
+      return supported && <button type="button" key={item.id} aria-pressed={range === item.id} onClick={() => setRange(item.id)}>{item.id}</button>;
+    })}</div></div>
+    {chartData.length > 1 ? <div className="mini-chart usdils-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartData} margin={{ top: 5, right: 8, left: 4, bottom: 0 }}><CartesianGrid stroke="#e8edf2" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} minTickGap={36} /><YAxis orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} width={54} domain={['auto', 'auto']} /><Tooltip formatter={(value: number | string) => [`${numberLabel(Number(value), 4)} ש״ח לדולר`, 'שער']} contentStyle={{ borderRadius: 8, direction: 'rtl', fontFamily: 'inherit' }} /><Line type="monotone" dataKey="rate" name="שער דולר / שקל" stroke="#2779a8" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div> : <p className="usdils-chart-empty">אין מספיק היסטוריה להצגת טווח זה.</p>}
+    <small className="usdils-caution">שער הדולר הוא גורם אחד בלבד; אין להסיק ממנו לבדו על האינפלציה, הסיכון או כיוון האג״ח.</small>
+  </section>;
 }
 
 function dateLabel(date: string | null | undefined): string {
@@ -451,7 +521,7 @@ function App() {
   const outlook = useMemo(() => data ? buildOutlookSummary({ regime: data.regime, signals: data.signals, creditContext }) : null, [data, creditContext]);
   const inflationCard = data?.cards.find((card) => card.key === 'cpi_inflation');
   const inflationStateLabel = !inflationCard || inflationCard.value === null || inflationCard.status === 'unknown' ? 'אין נתון עדכני' : inflationCard.status === 'green' ? 'תומכת יחסית' : inflationCard.status === 'red' ? 'מכבידה' : 'ניטרלית / מעורבת';
-  const heroEvidence = buildHeroEvidence({ signals: data?.signals ?? [], cards: data?.cards ?? [], creditStatus: creditLoading ? null : outlook?.creditStatus ?? null });
+  const heroEvidence = buildHeroEvidence({ signals: data?.signals ?? [], cards: data?.cards ?? [], creditStatus: creditLoading ? null : outlook?.creditStatus ?? null, usdIls: data?.markets.usdIls });
 
 
   return <main className="app-shell">
@@ -496,8 +566,9 @@ function App() {
       <InflationPanel data={data?.inflation ?? { latestIndex: null, mom: null, yoy: null, previousYoy: null, observationDate: null, targetLow: 1, targetHigh: 3, observations: [] }} />
 
       <section className="panel global-markets-panel">
-        <div className="panel-title"><div><span className="eyebrow">הקשר שוק בינלאומי</span><h2>דולר / שקל, תשואות ארה״ב ופער התשואות</h2><p>שער הדולר מול השקל לצד נתוני תשואה אמריקאיים ופער התשואות הריאליות.</p></div></div>
-        <div className="inflation-stats">{data && [data.markets.usdIls, data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)} <ConceptExplainer concept={series.key === 'usd_ils' ? 'usdIls' : series.key === 'us_10y_nominal' ? 'usNominal10y' : series.key === 'us_10y_real' ? 'usReal10y' : 'realYieldDifferential'} /></span>{series.key === 'usd_ils' && <small>שער הדולר מול השקל</small>}<b>{numberLabel(series.value)} {marketUnitLabel(series.unit)}</b><small>{series.observationDate ?? 'ממתין לתצפית'} · {series.source}</small></div>)}</div>
+        <div className="panel-title"><div><span className="eyebrow">הקשר שוק בינלאומי</span><h2>תשואות ארה״ב ופער התשואות</h2><p>נתוני תשואה אמריקאיים ופער התשואות הריאליות.</p></div></div>
+        {data && <UsdIlsPanel series={data.markets.usdIls} />}
+        <div className="inflation-stats">{data && [data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)} <ConceptExplainer concept={series.key === 'us_10y_nominal' ? 'usNominal10y' : series.key === 'us_10y_real' ? 'usReal10y' : 'realYieldDifferential'} /></span><b>{numberLabel(series.value)} {marketUnitLabel(series.unit)}</b><small>{series.observationDate ?? 'ממתין לתצפית'} · {series.source}</small></div>)}</div>
         <p>שער החליפין היציג של בנק ישראל הוא אינדיקטיבי. פער התשואות הריאליות משווה בין תשואות ואינו נתון CDS.</p>
         <div className="inflation-stats">{data && [data.markets.usdIls, data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={`${series.key}-changes`}><span>שינויים זמינים · {seriesLabel(series.key)}</span>{Object.entries(series.changes).map(([key, value]) => <small key={key}>{changeLabel(key)}: {value === null ? 'אין תצפית להשוואה' : `${numberLabel(value, 2)} ${marketUnitLabel(series.unit)}`}</small>)}<small>מקור: <a href={series.sourceUrl} target="_blank" rel="noreferrer">{series.source}</a> · מצב: {marketStatusLabel(series.status)}</small></div>)}</div>
         <p>{data?.markets.riskProxy.label}: {data?.markets.riskProxy.components.map((component) => `${seriesLabel(component.key)} ${component.value === null ? 'אין נתון' : numberLabel(component.value, 2)} ${marketUnitLabel(component.unit)} (${REGIME_STATUS_HE[component.status]}, ${component.sourceObservationDate ?? 'ללא תאריך'})`).join(' · ')}</p>

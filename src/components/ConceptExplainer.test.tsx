@@ -107,11 +107,11 @@ describe('Phase 1H accessible concept explanations', () => {
     expect(seriesLabel('us_10y_nominal')).toBe('תשואת אג״ח ארה״ב ל־10 שנים');
     expect(seriesLabel('us_10y_real')).toBe('תשואה ריאלית בארה״ב ל־10 שנים');
     expect(seriesLabel('il_us_real_yield_differential')).toBe('פער תשואה ריאלית ישראל–ארה״ב');
-    expect(html).toContain('דולר / שקל, תשואות ארה״ב ופער התשואות');
+    expect(html).toContain('תשואות ארה״ב ופער התשואות');
     expect(html).not.toContain('שערי חליפין');
     expect(CONCEPT_EXPLANATIONS.usdIls.what).toBe('כמה שקלים נדרשים כדי לקנות דולר אחד.');
-    expect(CONCEPT_EXPLANATIONS.usdIls.why).toBe('שינוי חד בשקל יכול להשפיע על אינפלציה, על תנאי הסיכון המקומיים ועל שוק האג״ח.');
-    expect(CONCEPT_EXPLANATIONS.usdIls.howToRead).toContain('מספר גבוה יותר פירושו בדרך כלל שקל חלש יותר מול הדולר');
+    expect(CONCEPT_EXPLANATIONS.usdIls.why).toBe('שינוי בשקל יכול להשפיע על מחירי יבוא, אינפלציה ותנאי הסיכון המקומיים.');
+    expect(CONCEPT_EXPLANATIONS.usdIls.howToRead).toContain('מספר גבוה יותר בדרך כלל אומר שקל חלש יותר');
     expect((['usNominal10y', 'usReal10y', 'realYieldDifferential'] as const).every((key) => Boolean(CONCEPT_EXPLANATIONS[key].what))).toBe(true);
   });
 

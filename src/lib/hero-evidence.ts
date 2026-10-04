@@ -1,4 +1,5 @@
-import type { MacroCard, Signal, SignalStatus } from '../../shared/types';
+import type { MacroCard, MarketSeries, Signal, SignalStatus } from '../../shared/types';
+import { usdIlsHeroMove } from './usdils';
 
 export interface HeroEvidence {
   helps: string[];
@@ -9,6 +10,7 @@ type HeroEvidenceInput = {
   signals: Pick<Signal, 'key' | 'status'>[];
   cards: Pick<MacroCard, 'key' | 'status' | 'value'>[];
   creditStatus: 'תומך' | 'מעורב' | 'זהיר' | 'לא זמין' | null;
+  usdIls?: MarketSeries;
 };
 
 const percent = (value: number | null | undefined): string | null => value == null || !Number.isFinite(value)
@@ -19,7 +21,7 @@ function stateOf(signals: HeroEvidenceInput['signals'], key: string): SignalStat
   return signals.find((signal) => signal.key === key)?.status ?? 'unknown';
 }
 
-export function buildHeroEvidence({ signals, cards, creditStatus }: HeroEvidenceInput): HeroEvidence {
+export function buildHeroEvidence({ signals, cards, creditStatus, usdIls }: HeroEvidenceInput): HeroEvidence {
   const helps: string[] = [];
   const pressures: string[] = [];
   const inflation = cards.find((card) => card.key === 'cpi_inflation');
@@ -54,6 +56,13 @@ export function buildHeroEvidence({ signals, cards, creditStatus }: HeroEvidence
       : 'אחד מאותות התשואות הארוכות מצביע על עלייה שעשויה להכביד על מחירי אג״ח קיימות.');
   } else if (realYield === 'yellow' || longTrend === 'yellow' || (realYield !== 'unknown' && longTrend !== 'unknown')) {
     pressures.push('התשואות הארוכות יציבות או מאותתות בכיוונים שונים; אין מהן אישור ברור לתמיכה.');
+  }
+
+  const fxMove = usdIls ? usdIlsHeroMove(usdIls) : null;
+  if (fxMove && (helps.length < 3 || pressures.length < 3)) {
+    const move = `ב־20 ימי מסחר הדולר ${fxMove.direction === 'weakening' ? 'עלה' : 'ירד'} ${percent(Math.abs(fxMove.changePct))}; השקל ${fxMove.direction === 'weakening' ? 'נחלש' : 'התחזק'}, מה שעשוי להשפיע על מחירי היבוא.`;
+    if (fxMove.direction === 'weakening' && pressures.length < 3) pressures.push(move);
+    else if (fxMove.direction === 'strengthening' && helps.length < 3) helps.push(move);
   }
 
   const risk = stateOf(signals, 'israel_risk_proxy');

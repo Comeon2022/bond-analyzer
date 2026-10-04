@@ -532,6 +532,63 @@ h1, h2, h3, p { margin-top: 0; }
   .inflation-panel > .inflation-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inflation-panel .panel-title { flex-direction: column; }
 }
+
+/* Phase 1M: USD/ILS context panel */
+.usdils-panel { margin: 12px 0 16px; padding: 15px 16px; border: 1px solid #dce5ec; border-radius: 8px; background: #f8fbfd; }
+.usdils-heading, .usdils-chart-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.usdils-heading h3 { display: flex; align-items: center; gap: 4px; margin: 0; color: #18344b; font-size: 20px; }
+.usdils-heading p { margin: 3px 0 0; color: #5e7181; font-size: 13px; }
+.usdils-trend { padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.usdils-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.usdils-direction { padding: 4px 10px; border: 1px solid #d8e2e9; border-radius: 99px; background: #fff; color: #405a6e; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.usdils-direction.positive { border-color: #b9dfca; color: #216346; }
+.usdils-direction.negative { border-color: #edc5c3; color: #963c39; }
+.usdils-trend.positive { color: #216346; background: #e5f3ec; }
+.usdils-trend.negative { color: #963c39; background: #fae8e7; }
+.usdils-trend.caution { color: #765c19; background: #f5efd9; }
+.usdils-trend.unknown { color: #647686; background: #eaf0f4; }
+.usdils-snapshots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.usdils-snapshot { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid #e4ebf0; border-radius: 5px; background: #fff; }
+.usdils-snapshot > span { color: #657789; font-size: 11px; }
+.usdils-snapshot > b { color: #253f54; font-size: 19px; line-height: 1.25; }
+.usdils-snapshot > small { color: #617385; font-size: 10px; line-height: 1.4; }
+.usdils-current { border-right: 3px solid #4c91b7; }
+.usdils-current > b { font-size: 23px; }
+.usdils-horizons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 9px 0; }
+.usdils-horizon { display: flex; flex-direction: column; gap: 2px; padding: 7px 9px; border-right: 2px solid #d4e0e8; background: #fff; }
+.usdils-horizon > b, .usdils-context > b, .usdils-chart-heading > b { color: #41596d; font-size: 12px; }
+.usdils-horizon > span { color: #263d51; font-size: 15px; font-weight: 700; }
+.usdils-horizon > small { color: #687a89; font-size: 10px; line-height: 1.4; }
+.usdils-freshness { margin: 7px 0; color: #657686; font-size: 11px; }
+.usdils-freshness[role="status"] { padding: 7px 9px; border-right: 3px solid #c58d39; background: #fbf5e9; color: #765a2c; }
+.usdils-interpretation { margin: 9px 0; padding: 9px 11px; border-right: 3px solid #83a9b8; background: #eef5f7; }
+.usdils-interpretation > b { color: #315267; font-size: 13px; }
+.usdils-interpretation p { margin: 3px 0; color: #364f62; font-size: 13px; line-height: 1.5; }
+.usdils-interpretation small, .usdils-caution { color: #71808d; font-size: 10px; line-height: 1.45; }
+.usdils-context { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid #e1e9ee; }
+.usdils-context > div { display: flex; flex-wrap: wrap; gap: 4px 18px; color: #586d7e; font-size: 11px; }
+.usdils-context > small { color: #778692; font-size: 10px; }
+.usdils-chart-heading { margin-top: 5px; }
+.usdils-range-controls { display: flex; gap: 4px; }
+.usdils-range-controls button { min-width: 36px; padding: 3px 7px; border: 1px solid #cedbe4; border-radius: 4px; background: #fff; color: #50687a; font-size: 11px; cursor: pointer; }
+.usdils-range-controls button[aria-pressed="true"] { border-color: #327da4; background: #327da4; color: #fff; }
+.usdils-chart { height: 130px; margin-top: 3px; }
+.usdils-chart-empty { margin: 7px 0; color: #798893; font-size: 11px; }
+.usdils-caution { display: block; margin-top: 4px; }
+@media (max-width: 760px) {
+  .usdils-snapshots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .usdils-horizons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .usdils-panel { padding: 12px 10px; }
+  .usdils-heading h3 { font-size: 18px; }
+  .usdils-heading { align-items: flex-start; }
+  .usdils-badges { flex-direction: column; align-items: flex-end; }
+  .usdils-trend { font-size: 10px; }
+  .usdils-snapshot { padding: 7px; }
+  .usdils-snapshot > small { font-size: 9px; }
+  .usdils-context > div { flex-direction: column; gap: 3px; }
+}
 @media (max-width: 650px) {
   .signal-card { min-height: 245px; }
   .card-explanation { font-size: 12px; }
