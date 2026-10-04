@@ -468,3 +468,48 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Production post-deploy `/api/overview`, `/api/sources/status`, and `/api/ingestion/status` returned HTTP 200. CPI is still empty (0 observations, no annual inflation) because manual ingestion could not be authenticated from this runner. Wrangler confirms the remote `ADMIN_INGEST_TOKEN` secret exists, but secret values cannot be retrieved and no local token is configured. The prior D1 CPI state was confirmed empty; no values were seeded. Manual production ingestion and populated-CPI visual verification remain outstanding until the authorized token is supplied through the operator's secure local prompt.
 - Git target verified as bond dashboard repository `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; RAGOps was not accessed.
 - Implementation commit SHA: `1a3f621129ebd8856b0d6e2864d44714a7552344` (`Restore official CBS CPI ingestion and align hero`); the final handoff-only update follows in the next commit.
+
+## Phase 1S - Exact Hero Rebuild and CPI Activation Gate (2026-10-04)
+
+### Hero rebuild
+
+- Replaced the previous hero component structure with a new semantic layout: one six-cell status strip, a two-column main grid with exactly one today section and one forward section, and a shared two-column support/pressure grid. The deterministic regime, confidence, coverage, credit, inflation, evidence, and outlook values are unchanged.
+- The desktop status strip uses the specified six grid tracks (`220/120/110/110/160/120px` minimums with the required fractional weights), centered cell content, inline help icons, and cell separators. Desktop narrative columns use equal `repeat(2, minmax(0, 1fr))` tracks, identical `0 24px` padding, top alignment, a single center divider, and a 20px gap below the strip. The support/pressure pair is also an equal, top-aligned grid. Hero padding is 24px top/sides and 18px bottom; headings use a 12px bottom margin. There are no absolute-positioned hero elements or nested cards.
+- Added semantic hero tests for a single status strip, exactly two content sections, unique headings, ordered status cells and outlook statements, and a shared evidence grid.
+- Built with `VITE_API_BASE_URL=https://israel-macro-rates-dashboard.karu-lior.workers.dev`. The first manual Pages upload lacked this build-time variable and showed a localhost API fallback; it was immediately superseded by a corrected production upload. The production-domain screenshot below confirms the corrected build connects to the live Worker.
+
+### Verification and deployment
+
+- `npm run typecheck`: passed.
+- `npm test`: passed, 21 files and 100 tests.
+- `npm run build`: passed using the production Worker API URL.
+- `npx wrangler deploy --dry-run`: passed.
+- Pages deployed to `https://265a93c4.bond-analyzer-av2.pages.dev` (production branch `main`; deployment `265a93c4-056f-4541-a928-fc198bdd96ad`). Production alias `https://bond-analyzer-av2.pages.dev/` loaded live Worker data and showed no API connection error.
+- Captured and visually inspected a 1440x1200 production screenshot at `C:\Users\Liorkale\Documents\Claude\Projects\StockAnalitics\bond-dashboard-phase1s-production-1440.png`. It shows the six aligned status items, equal today/forward columns with aligned headings and centered divider, aligned support/pressure headings, and no excess lower blue space. The screenshot is stored outside the repository.
+- Worker ingestion code did not change in Phase 1S, so the existing Worker deployment remains version `d4682035-0d35-47cc-b77b-a3b7cdc3e99f`; `/api/health` returns `ok: true`, with D1 reachable.
+
+### CPI production status — still requires operator authentication
+
+- Production checks after the corrected Pages deployment: `/api/overview` returned CPI observation count `0`, latest CPI index `null`, and annual inflation `null`; `/api/sources/status` reports CBS CPI source status `error`, failure kind `unavailable`, and no observation. No CPI data was seeded or fabricated.
+- The authenticated manual ingestion has not been run. `ADMIN_INGEST_TOKEN` is configured remotely, but its secret value is unavailable in this coding session. Consequently Phase 1S is **not complete** and no production CPI recovery is claimed. The screen correctly distinguishes CPI-unavailable state while continuing to display live macro data.
+- Operator action required: run the following in PowerShell on a machine/session where the configured ingestion token is available. Enter the secret only at the prompt, do not send or commit it, and share the sanitized JSON response so production CPI can be verified afterward.
+
+  ```powershell
+  $env:ADMIN_INGEST_TOKEN = Read-Host 'Enter admin ingestion token'
+
+  try {
+    $resp = Invoke-RestMethod `
+      -Method Post `
+      -Uri 'https://israel-macro-rates-dashboard.karu-lior.workers.dev/api/admin/ingest' `
+      -Headers @{ Authorization = "Bearer $env:ADMIN_INGEST_TOKEN" }
+
+    $resp | ConvertTo-Json -Depth 10
+  }
+  finally {
+    Remove-Item Env:ADMIN_INGEST_TOKEN
+  }
+  ```
+
+- Completion remains gated on response fields `cbsCpi.ok = true`, `rowsRead > 0`, and a non-null `latestDate`, followed by `/api/overview` returning CPI history, a latest CPI value, and annual inflation, and a live UI check of the CPI card/detail and hero inflation line.
+- Repository verified as the bond dashboard on `main` with origin `https://github.com/Comeon2022/bond-analyzer.git`; RAGOps was not accessed. Phase specs and CSV fixtures remain unstaged.
+- Hero implementation commit: `68bf0baa9e9c931cb75a9c31c1aafae240ee4599` (`Rebuild executive hero to Phase 1S template`). This handoff update is committed separately.
