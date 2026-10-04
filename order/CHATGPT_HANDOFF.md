@@ -301,6 +301,29 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Implementation commit `e814bcc9251390989087e582661ff15bce0fd667` (`Clarify core metrics and inflation presentation`) was pushed to `origin/main`. Published the verified `dist/` to Pages project `bond-analyzer` on branch `main`; deployment `b645cfe2` is available at `https://b645cfe2.bond-analyzer-av2.pages.dev`. The production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-Ol72Gazq.js` and `index-DK3Mv78G.css`. UTF-8 bundle checks confirmed `מדדי הליבה`, `אינפלציה שנתית`, `מדד המחירים לצרכן`, the missing annual-data copy, and the new plain-Hebrew card summary. The CSS asset contains the compact inflation chart rule.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; `origin/main` matched the implementation commit at verification. Only the Phase 1L source, tests, and this handoff are task changes; the user-provided phase specifications and CSVs remain unstaged. RAGOps was not accessed or modified.
 
+## Phase 1M USD/ILS data depth and interpretation — 2026-10-04
+
+### Implemented
+
+- Reused `markets.usdIls` from `/api/overview`, including the BOI rate, observation date, source status, 1/5/20/60-session percentage changes, and historical observations. The current contract already contained all required inputs; no duplicate endpoint or API change was needed.
+- Rebuilt the USD/ILS presentation as a dedicated `דולר / שקל` market context panel with subtitle `שער הדולר מול השקל ומגמת השקל`, current ILS-per-USD quote, date/source freshness, direction badge (`השקל התחזק`, `השקל נחלש`, or `כמעט ללא שינוי`), and a separate trend classification badge.
+- Added session rows for יום, 5, 20, and 60 ימי מסחר. Each describes USD/ILS movement in the shekel perspective (rising USD/ILS means a weaker shekel, falling means stronger), with values rendered from the live payload.
+- Added `src/lib/usdils.ts` deterministic helpers. A move is material at `0.3%`; the 5/20/60-session signs classify as strengthening/weakening when at least two are available and agree, mixed when material signs conflict, unclear when all are within threshold, or insufficient with fewer than two available horizons. Stale data is source status other than `ok`, a missing date, or an observation older than seven calendar days; in that case current trend/interpretation is suppressed and the UI shows the required stale-data message.
+- Added 20- and 60-observation high/low context only when each history window exists, with a cautious lower/middle/upper range description. Added chart controls for 1M/3M/6M/1Y, each offered only when its 20/60/120/240-observation history exists.
+- Added deterministic, cautious plain-language interpretation about possible import-price, inflation, and local-risk channels, plus an accessible explainer covering the quote, direction, and the fact that FX alone does not determine bond-market direction.
+- Added at most one USD/ILS hero bullet when a fresh 20-session move reaches the named 1% material threshold and there is room in the existing evidence limits. No macro regime or calculation logic changed.
+- Updated styling for the snapshot tiles, horizon grid, trend/direction badges, range context, and historical chart. Tests cover USD-to-shekel direction, aligned/mixed/flat/insufficient trend cases, all display horizons and live values, stale suppression, insufficient history, range/chart availability, cautious wording, recommendations, and hero integration.
+
+### Verification and rollout
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (74 tests across 15 files).
+- `npm run build`: passed.
+- No Worker deployment was needed because the existing overview payload already supplied the required history and lookbacks.
+- Implementation commit `4c07a6ae7435a38ce119a71cef80c97a1d8d1a18` (`Expand USD ILS market context`) was pushed to `origin/main`. Published the verified frontend to Pages project `bond-analyzer`; deployment preview is `https://cf833349.bond-analyzer-av2.pages.dev`.
+- Production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-BnHGJOPq.js` and `index-DVR4nPG6.css`; UTF-8 bundle checks confirmed the current-rate context, all-session copy, stale-data state, interpretation heading, shekel direction, and chart. The production bundle retained its configured Worker origin. Its live `/api/overview` returned HTTP 200 JSON with a current USD/ILS value and observation date, 429 historical observations, all four lookbacks, and BOI source status `ok`.
+- Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; `origin/main` matched the implementation commit at verification. User-provided phase specs/CSVs remain unstaged. RAGOps was not accessed or modified.
+
 ## Phase 1K executive brief rebuild — 2026-10-03
 
 ### Implemented
