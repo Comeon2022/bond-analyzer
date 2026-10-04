@@ -298,7 +298,8 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npm test`: passed (68 tests across 14 files).
 - `npm run build`: passed.
 - `npx wrangler deploy --dry-run`: passed; Wrangler resolved the dashboard D1 and asset bindings. No Worker/API behavior changed.
-- Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. Only the Phase 1L source, tests, and this handoff are task changes; the user-provided phase specifications and CSVs remain unstaged. RAGOps was not accessed or modified.
+- Implementation commit `e814bcc9251390989087e582661ff15bce0fd667` (`Clarify core metrics and inflation presentation`) was pushed to `origin/main`. Published the verified `dist/` to Pages project `bond-analyzer` on branch `main`; deployment `b645cfe2` is available at `https://b645cfe2.bond-analyzer-av2.pages.dev`. The production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-Ol72Gazq.js` and `index-DK3Mv78G.css`. UTF-8 bundle checks confirmed `מדדי הליבה`, `אינפלציה שנתית`, `מדד המחירים לצרכן`, the missing annual-data copy, and the new plain-Hebrew card summary. The CSS asset contains the compact inflation chart rule.
+- Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; `origin/main` matched the implementation commit at verification. Only the Phase 1L source, tests, and this handoff are task changes; the user-provided phase specifications and CSVs remain unstaged. RAGOps was not accessed or modified.
 
 ## Phase 1K executive brief rebuild — 2026-10-03
 
