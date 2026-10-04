@@ -43,12 +43,12 @@ describe('Phase 1H accessible concept explanations', () => {
     }
   });
 
-  it('shows the executive brief in status, today, forward order with compact inflation and no nested status rail', () => {
+  it('rebuilds the hero as one status strip and exactly two semantic content columns', () => {
     const html = renderToStaticMarkup(<App />);
     expect(html.split('מצב כולל היום').length - 1).toBe(1);
     expect(html.split('איפה אנחנו היום').length - 1).toBe(1);
     expect(html.split('מבט קדימה').length - 1).toBe(1);
-    const statusStart = html.indexOf('class="briefing-status"');
+    const statusStart = html.indexOf('class="phase1s-status-strip"');
     const todayStart = html.indexOf('id="regime-title"');
     const forwardStart = html.indexOf('id="forward-title"');
     expect(statusStart).toBeGreaterThanOrEqual(0);
@@ -56,7 +56,7 @@ describe('Phase 1H accessible concept explanations', () => {
     expect(todayStart).toBeLessThan(forwardStart);
     expect(html).not.toContain('regime-rail');
     expect(html).not.toContain('inflation-snapshot');
-    expect(html).toContain('class="inflation-line"');
+    expect(html).toContain('class="phase1s-inflation"');
     expect(html).toContain('מבט קדימה');
     expect(html).toContain('מה עוזר כרגע');
     expect(html).toContain('מה עדיין לוחץ');
@@ -77,7 +77,7 @@ describe('Phase 1H accessible concept explanations', () => {
     expect(html).toContain('כרגע חסר נתון שנתי עדכני, ולכן מוצג מדד המחירים אך לא קריאת אינפלציה שנתית מלאה.');
     expect(html).toContain('inflation-index-stat');
     expect(html).toContain('תרחיש בסיס');
-    const forwardList = html.slice(html.indexOf('<ul class="forward-list">'), html.indexOf('</ul>', html.indexOf('<ul class="forward-list">')));
+    const forwardList = html.slice(html.indexOf('<ul class="phase1s-forward-list">'), html.indexOf('</ul>', html.indexOf('<ul class="phase1s-forward-list">')));
     expect(forwardList.match(/<li>/g)).toHaveLength(3);
     expect(forwardList).toContain('אם המצב נמשך:');
     expect(forwardList).toContain('שיפור אפשרי:');
@@ -86,9 +86,9 @@ describe('Phase 1H accessible concept explanations', () => {
 
   it('places the complete overall status before the today and forward narrative', () => {
     const html = renderToStaticMarkup(<App />);
-    const statusStart = html.indexOf('class="briefing-status"');
+    const statusStart = html.indexOf('class="phase1s-status-strip"');
     const todayStart = html.indexOf('id="regime-title"');
-    const forwardStart = html.indexOf('class="forward-block"');
+    const forwardStart = html.indexOf('class="phase1s-forward"');
     expect(statusStart).toBeGreaterThanOrEqual(0);
     expect(statusStart).toBeLessThan(todayStart);
     expect(todayStart).toBeLessThan(forwardStart);
@@ -103,12 +103,12 @@ describe('Phase 1H accessible concept explanations', () => {
 
   it('keeps hero status semantics in order and defines equal columns and aligned support/pressure lists', () => {
     const html = renderToStaticMarkup(<App />);
-    const statusStart = html.indexOf('class="briefing-status"');
-    const row = html.slice(statusStart, html.indexOf('<div class="briefing-columns"', statusStart));
+    const statusStart = html.indexOf('class="phase1s-status-strip"');
+    const row = html.slice(statusStart, html.indexOf('<div class="phase1s-columns"', statusStart));
     const order = [
-      row.indexOf('<b>'), row.indexOf('<strong>'), row.indexOf('class="briefing-status-item"'),
-      row.indexOf('class="briefing-status-item"', row.indexOf('class="briefing-status-item"') + 1),
-      row.indexOf('class="briefing-counts"'), row.indexOf('class="briefing-credit"'),
+      row.indexOf('phase1s-status-label'), row.indexOf('phase1s-status-regime'),
+      row.indexOf('phase1s-status-cell'), row.indexOf('phase1s-status-cell', row.indexOf('phase1s-status-cell') + 1),
+      row.indexOf('phase1s-status-counts'), row.indexOf('phase1s-status-credit'),
     ];
     expect(order.every((position) => position >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -119,12 +119,15 @@ describe('Phase 1H accessible concept explanations', () => {
     expect((html.match(/מבט קדימה/g) ?? [])).toHaveLength(1);
     expect(html).toContain('class="support-list"');
     expect(html).toContain('class="pressure-list"');
-    const columns = html.indexOf('class="briefing-columns"');
-    const current = html.indexOf('class="today-block"');
-    const forward = html.indexOf('class="forward-block"');
+    const columns = html.indexOf('class="phase1s-columns"');
+    const current = html.indexOf('class="phase1s-today"');
+    const forward = html.indexOf('class="phase1s-forward"');
     expect(columns).toBeGreaterThanOrEqual(0);
     expect(columns).toBeLessThan(current);
     expect(current).toBeLessThan(forward);
+    const columnsHtml = html.slice(columns, html.indexOf('</div>', forward));
+    expect(columnsHtml.match(/<section class="phase1s-(today|forward)"/g)).toHaveLength(2);
+    expect(html).toContain('class="phase1s-evidence-grid"');
   });
 
   it('uses clear USD/ILS wording and provides plain-language explanations for the global market series', () => {
