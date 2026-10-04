@@ -310,7 +310,7 @@ export function DetailDrawer({ card, signal, onClose }: { card: MacroCard; signa
       <details className="drawer-technical"><summary>הנתון מאחורי הקלעים</summary>
         <div className="drawer-section"><h3>כלל הסיווג</h3><ul>{(rules[card.key] ?? []).map((rule) => <li key={rule}>{rule}</li>)}</ul></div>
         {signal && <div className="drawer-section"><h3>ערכי החישוב</h3><dl className="details-grid">{Object.entries(signal.value).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{typeof value === 'number' ? numberLabel(value, 3) : value ?? '—'}</dd></div>)}</dl></div>}
-        <div className="drawer-section provenance"><h3>מקור ותזמון</h3><p>{card.source}</p><p>תאריך תצפית: {dateLabel(card.observedAt)}</p><p>קליטה אחרונה: {dateLabel(typeof card.details.sourceFetchedAt === 'string' ? card.details.sourceFetchedAt : null)}</p>{card.sourceUrl !== '#' && <a href={card.sourceUrl} target="_blank" rel="noreferrer">פתיחת המקור הרשמי ↗</a>}</div>
+        <div className="drawer-section provenance"><h3>מקור ותזמון</h3><p>{card.source}</p><p>תאריך תצפית: {dateLabel(card.observedAt)}</p><p>קליטה אחרונה: {dateLabel(typeof card.details.sourceFetchedAt === 'string' ? card.details.sourceFetchedAt : null)}</p>{(card.sourceUrls?.length ? card.sourceUrls : card.sourceUrl !== '#' ? [card.sourceUrl] : []).map((sourceUrl, index) => <a key={sourceUrl} href={sourceUrl} target="_blank" rel="noreferrer">{card.sourceUrls && card.sourceUrls.length > 1 ? `פתיחת מקור ${index + 1} ↗` : 'פתיחת המקור הרשמי ↗'}</a>)}</div>
       </details>
     </section>
   </div>;
@@ -627,7 +627,8 @@ function App() {
       <section className="panel global-markets-panel">
         <div className="panel-title"><div><span className="eyebrow">שער חליפין ותנאי סיכון מקומיים</span><h2>דולר / שקל</h2><p>שער החליפין היציג של בנק ישראל הוא אינדיקטיבי.</p></div></div>
         {data && <UsdIlsPanel series={data.markets.usdIls} />}
-        <p>{data?.markets.riskProxy.label}: {data?.markets.riskProxy.components.map((component) => `${seriesLabel(component.key)} ${component.value === null ? 'אין נתון' : numberLabel(component.value, 2)} ${marketUnitLabel(component.unit)} (${REGIME_STATUS_HE[component.status]}, ${component.sourceObservationDate ?? 'ללא תאריך'})`).join(' · ')}</p>
+        <p>{data?.markets.riskProxy.label}: {data?.markets.riskProxy.explanationHe}</p>
+        <p>{data?.markets.riskProxy.components.map((component) => `${seriesLabel(component.key)} ${component.value === null ? 'אין נתון' : numberLabel(component.value, 2)} ${marketUnitLabel(component.unit)} (${REGIME_STATUS_HE[component.status]}, ${component.sourceObservationDate ?? 'ללא תאריך'}; מקור: ${component.source})`).join(' · ')}</p>
       </section>
       {data && <UsTreasuryPanel markets={data.markets} />}
       <section className="panel"><div className="panel-title"><div><span className="eyebrow">פרסום בנק ישראל</span><h2>ציפיות אינפלציה <ConceptExplainer concept="inflationExpectations" /></h2></div><span>{dateLabel(data?.expectations.publicationDate)}</span></div><div className="inflation-stats">{data?.expectations.items.map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)}</span><b>{series.value === null ? 'אין עדיין תצפית' : `${numberLabel(series.value)}%`}</b><small>{dateLabel(series.observationDate)} · {series.source}</small><small>מצב מקור: {marketStatusLabel(series.status)}</small></div>)}</div></section>

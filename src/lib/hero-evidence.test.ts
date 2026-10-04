@@ -61,7 +61,7 @@ describe('plain-language hero evidence', () => {
 
   it('adds at most one material fresh U.S. rates bullet and suppresses stale moves', () => {
     const today = new Date().toISOString().slice(0, 10);
-    const usNominal10y = { key: 'us_10y_nominal', value: 4.3, unit: '%', observationDate: today, sourceTimestamp: today, source: 'FRED DGS10', sourceUrl: '#', status: 'ok' as const, changes: { '20dBp': 32 }, history: [] };
+    const usNominal10y = { key: 'us_10y_nominal', value: 4.3, unit: '%', observationDate: today, sourceTimestamp: today, source: 'U.S. Treasury', sourceUrl: '#', status: 'ok' as const, changes: { '20dBp': 32 }, history: [] };
     const evidence = buildHeroEvidence({ cards: [], signals: [], creditStatus: null, usNominal10y });
     const bullets = [...evidence.helps, ...evidence.pressures].filter((line) => line.includes('תשואות ארה״ב'));
     expect(bullets).toHaveLength(1);

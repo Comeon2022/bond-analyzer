@@ -24,22 +24,25 @@ function classify(value: number | null, threshold: number, supportiveWhenFalling
 
 export function riskConditionsProxy(inputs: RiskInputs, thresholds: RiskThresholds): RiskProxy {
   const inputsByKey = [
-    { key: 'usdIls20d', value: inputs.usdIls20dPercent, unit: '% / 20 sessions', threshold: thresholds.usdIlsPercent, supportiveWhenFalling: true, date: inputs.usdIlsObservationDate },
-    { key: 'israelRealYieldChange', value: inputs.israelRealYieldChangeBps, unit: 'bp / source period', threshold: thresholds.realYieldBps, supportiveWhenFalling: true, date: inputs.israelRealObservationDate },
-    { key: 'realYieldDifferentialChange', value: inputs.realYieldDifferentialChangeBps, unit: 'bp / comparable period', threshold: thresholds.differentialBps, supportiveWhenFalling: true, date: inputs.differentialObservationDate },
+    { key: 'usdIls20d', value: inputs.usdIls20dPercent, unit: '% / 20 sessions', threshold: thresholds.usdIlsPercent, supportiveWhenFalling: true, date: inputs.usdIlsObservationDate, source: 'בנק ישראל', sourceUrls: ['https://boi.org.il/PublicApi/GetExchangeRate?key=USD'], provenance: 'שער דולר/שקל יציג ושינוי לפי תצפיות זמינות.' },
+    { key: 'israelRealYieldChange', value: inputs.israelRealYieldChangeBps, unit: 'bp / source period', threshold: thresholds.realYieldBps, supportiveWhenFalling: true, date: inputs.israelRealObservationDate, source: 'בנק ישראל', sourceUrls: ['https://boi.org.il/en/economic-roles/statistics/bonds-and-central-bank-bills-makam/bonds-and-central-bank-bills-makam-yields-to-maturity/'], provenance: 'שינוי בתשואה הריאלית ל־10 שנים בישראל לפי תצפיות עקום בנק ישראל.' },
+    { key: 'realYieldDifferentialChange', value: inputs.realYieldDifferentialChangeBps, unit: 'bp / comparable period', threshold: thresholds.differentialBps, supportiveWhenFalling: true, date: inputs.differentialObservationDate, source: 'בנק ישראל + U.S. Treasury', sourceUrls: ['https://boi.org.il/en/economic-roles/statistics/bonds-and-central-bank-bills-makam/bonds-and-central-bank-bills-makam-yields-to-maturity/', 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates'], provenance: 'שינוי בפער המחושב בין תשואות ריאליות ל־10 שנים בישראל ובארה״ב.' },
   ];
   const components: RiskComponent[] = inputsByKey.map((input) => {
     const classified = classify(input.value, input.threshold, input.supportiveWhenFalling);
-    return { key: input.key, value: input.value, unit: input.unit, normalizedScore: classified.score, status: classified.status, sourceObservationDate: input.date };
+    return { key: input.key, value: input.value, unit: input.unit, normalizedScore: classified.score, status: classified.status, sourceObservationDate: input.date, source: input.source, sourceUrls: input.sourceUrls, provenance: input.provenance };
   });
   const available = components.filter((component) => component.normalizedScore !== null);
-  if (!available.length) return { value: null, status: 'unknown', label: 'פרוקסי תנאי הסיכון בישראל', components, coverage: 0, explanationHe: 'אין די רכיבי מקור מאומתים לחישוב תנאי הסיכון.' };
+  if (!available.length) return { value: null, status: 'unknown', label: 'פרוקסי תנאי הסיכון בישראל', source: 'בנק ישראל + U.S. Treasury', sourceUrls: [...new Set(components.flatMap((component) => component.sourceUrls))], provenance: 'פרוקסי שקוף המשלב שער דולר/שקל, תשואה ריאלית בישראל ופער תשואות ריאליות בין ישראל לארה״ב; אינו CDS.', components, coverage: 0, explanationHe: 'אין די רכיבי מקור מאומתים לחישוב תנאי הסיכון.' };
   const score = available.reduce((sum, component) => sum + component.normalizedScore!, 0) / available.length;
   const status: SignalStatus = score >= 0.5 ? 'green' : score <= -0.5 ? 'red' : 'yellow';
   return {
     value: score,
     status,
     label: 'פרוקסי תנאי הסיכון בישראל',
+    source: 'בנק ישראל + U.S. Treasury',
+    sourceUrls: [...new Set(components.flatMap((component) => component.sourceUrls))],
+    provenance: 'פרוקסי שקוף המשלב שער דולר/שקל, תשואה ריאלית בישראל ופער תשואות ריאליות בין ישראל לארה״ב; אינו CDS.',
     components,
     coverage: available.length / components.length,
     explanationHe: 'מדד תנאי סיכון ישראל הוא פרוקסי שקוף המבוסס על שער החליפין ופערי תשואות; הוא אינו ציטוט CDS או מדד סחיר.',

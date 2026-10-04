@@ -24,6 +24,7 @@ describe('U.S. Treasury context panel', () => {
     expect(html).toContain('מקור: U.S. Treasury');
     expect(html).toContain('מחושב מנתוני U.S. Treasury: תשואה נומינלית ל־10 שנים פחות תשואה ריאלית ל־10 שנים');
     expect(html).toContain('מקור: U.S. Treasury · מחושב: תשואה ל־10 שנים פחות תשואה ל־2 שנים');
+    expect(html).not.toContain('FRED');
   });
 
   it('shows explicit missing values and stale status without inventing observations', () => {

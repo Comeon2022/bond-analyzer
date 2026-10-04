@@ -10,6 +10,11 @@ describe('Phase 1B calculations', () => {
     expect(red.status).toBe('red');
     expect(neutral.status).toBe('yellow');
     expect(neutral.value).toBe(0);
+    const differential = green.components.find((component) => component.key === 'realYieldDifferentialChange')!;
+    expect(differential.source).toBe('בנק ישראל + U.S. Treasury');
+    expect(differential.sourceUrls).toContain('https://home.treasury.gov/resource-center/data-chart-center/interest-rates');
+    expect(JSON.stringify(green)).not.toContain('FRED');
+    expect(green.components.map((component) => component.value)).toEqual([-2, -15, -15]);
   });
 
   it('uses available proxy components only and reports proxy coverage', () => {

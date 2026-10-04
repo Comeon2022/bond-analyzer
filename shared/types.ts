@@ -32,6 +32,7 @@ export interface MacroCard {
   observedAt: string | null;
   source: string;
   sourceUrl: string;
+  sourceUrls?: string[];
   history: Observation[];
   pending: boolean;
   details: Record<string, number | string | null>;
@@ -73,6 +74,7 @@ export interface MarketSeries {
   revisionNumber?: number | null;
   derived?: boolean;
   provenance?: string;
+  sourceUrls?: string[];
 }
 
 export interface RiskComponent {
@@ -82,12 +84,18 @@ export interface RiskComponent {
   normalizedScore: number | null;
   status: SignalStatus;
   sourceObservationDate: string | null;
+  source: string;
+  sourceUrls: string[];
+  provenance: string;
 }
 
 export interface RiskProxy {
   value: number | null;
   status: SignalStatus;
   label: 'פרוקסי תנאי הסיכון בישראל';
+  source: string;
+  sourceUrls: string[];
+  provenance: string;
   components: RiskComponent[];
   coverage: number;
   explanationHe: string;

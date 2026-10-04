@@ -4,7 +4,7 @@ import { buildUsTreasuryContext, usTreasuryHeroMove } from './us-treasury-contex
 
 function series(key: string, value: number | null, changes: Record<string, number | null>, overrides: Partial<MarketSeries> = {}): MarketSeries {
   const today = new Date().toISOString().slice(0, 10);
-  return { key, value, unit: '%', observationDate: today, sourceTimestamp: today, source: 'FRED', sourceUrl: 'https://fred.stlouisfed.org', status: 'ok', changes, history: [], ...overrides };
+  return { key, value, unit: '%', observationDate: today, sourceTimestamp: today, source: 'U.S. Treasury', sourceUrl: 'https://home.treasury.gov', status: 'ok', changes, history: [], ...overrides };
 }
 
 function context(nominal: Record<string, number | null>, real: Record<string, number | null>, breakeven: Record<string, number | null>, overrides: Partial<{ nominal: Partial<MarketSeries>; real: Partial<MarketSeries>; breakeven: Partial<MarketSeries>; curve: Partial<MarketSeries> }> = {}) {

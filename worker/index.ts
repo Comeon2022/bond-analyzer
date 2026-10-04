@@ -465,6 +465,12 @@ function toObservation(row: DbObservation): Observation {
   return { observationDate: row.observation_date, value: row.value, ingestedAt: row.ingested_at, sourceTimestamp: row.source_timestamp, revisionNumber: row.revision_number };
 }
 
+function createRealYieldDifferential(diffCurrent: number | null, signal: Signal | undefined, ingestedAt = nowIso(), status?: SourceStatus['status']): MarketSeries {
+  const change = signal?.value.changeBps;
+  const currentYear = new Date().getUTCFullYear();
+  return { key: 'il_us_real_yield_differential', value: diffCurrent, unit: 'bp', observationDate: signal?.observationDate ?? null, sourceTimestamp: null, ingestedAt, revisionNumber: null, source: 'בנק ישראל + U.S. Treasury', sourceUrl: BOI_REAL_CURVE_URL, sourceUrls: [BOI_REAL_CURVE_URL, treasuryCsvUrl(currentYear, 'daily_treasury_real_yield_curve')], status: status ?? (diffCurrent === null ? 'pending' : 'ok'), derived: true, provenance: 'הפרש בין תשואה ריאלית ל־10 שנים בישראל לבין תשואה ריאלית ל־10 שנים בארה״ב; מבוסס על התצפיות הזמינות בתאריכים בני השוואה.', changes: { changeBps: typeof change === 'number' ? change : null }, history: [] };
+}
+
 function cpiStats(rows: DbObservation[]) {
   const indexByMonth = new Map(rows.map((row) => [row.observation_date.slice(0, 7), row.value]));
   const latest = rows.at(-1);
@@ -624,9 +630,9 @@ async function buildSignals(db: D1Database, definitions: DbSignalDefinition[], s
     if (sourceMap.get('boi_nominal_curve')?.status !== 'ok') status = 'unknown';
     signals.push(asSignal(trendDefinition, status, { current10yNominal: latestNominal?.value ?? null, changeOverSourceMonthBps: nominalChangeBps, comparisonDate: priorNominal?.date ?? null, thresholdBps: yieldThreshold, availableSourceObservations: nominalRows.length }, nominalChangeBps === null ? 'ממתין לשתי תצפיות מקור בעקום הנומינלי.' : 'קובצי העקום הנומינלי של בנק ישראל הם ממוצעים תקופתיים; אין כאן השלמה לתצפיות יומיות.', latestNominal?.date ?? null, nominalChangeBps));
   }
-  const pushContextSignal = (key: string, status: SignalStatus, value: Signal['value'], observationDate: string | null, score: number | null = null) => {
+  const pushContextSignal = (key: string, status: SignalStatus, value: Signal['value'], observationDate: string | null, score: number | null = null, explanationHe?: string) => {
     const definition = byKey.get(key);
-    if (definition) signals.push(asSignal(definition, status, value, definition.description_he, observationDate, score));
+    if (definition) signals.push(asSignal(definition, status, value, explanationHe ?? definition.description_he, observationDate, score));
   };
   const currentUsdValue = latestUsd?.value ?? null;
   const usdStatus: SignalStatus = sourceMap.get('boi_usdils')?.status === 'ok' ? 'yellow' : 'unknown';
@@ -636,7 +642,8 @@ async function buildSignals(db: D1Database, definitions: DbSignalDefinition[], s
     const sourceKey = key === 'us_10y_nominal' ? 'us_treasury_nominal' : 'us_treasury_real';
     const status: SignalStatus = sourceMap.get(sourceKey)?.status === 'ok' ? 'yellow' : 'unknown';
     const changes = [1, 5, 20, 60].map((sessions) => [sessions, lookbackChange(rows.map((row) => ({ date: row.observation_date, value: row.value })), sessions)] as const);
-    pushContextSignal(key, status, { current: latest?.value ?? null, change1dBps: changes[0][1] === null ? null : changes[0][1] * 100, change5dBps: changes[1][1] === null ? null : changes[1][1] * 100, change20dBps: changes[2][1] === null ? null : changes[2][1] * 100, change60dBps: changes[3][1] === null ? null : changes[3][1] * 100 }, latest?.observation_date ?? null);
+    const explanation = key === 'us_10y_nominal' ? 'תשואה נומינלית יומית ממקור U.S. Treasury הרשמי; נתון הקשר בלבד.' : 'תשואה ריאלית יומית ממקור U.S. Treasury הרשמי; נתון הקשר בלבד.';
+    pushContextSignal(key, status, { current: latest?.value ?? null, change1dBps: changes[0][1] === null ? null : changes[0][1] * 100, change5dBps: changes[1][1] === null ? null : changes[1][1] * 100, change20dBps: changes[2][1] === null ? null : changes[2][1] * 100, change60dBps: changes[3][1] === null ? null : changes[3][1] * 100 }, latest?.observation_date ?? null, null, explanation);
   };
   addUsContext('us_10y_nominal', usNominalRows, latestUsNominal);
   addUsContext('us_10y_real', usRealRows, latestUsReal);
@@ -746,12 +753,13 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
   const previousReal = comparisonDate ? real10.find((row) => row.date === comparisonDate) ?? null : null;
   const realChange = typeof realSignal?.score === 'number' ? realSignal.score : null;
   const trendSignal = signalByKey.get('long_yield_momentum');
-  const card = (key: string, title: string, value: number | null, previousValue: number | null, change: number | null, unit: string, explanation: string, observedAt: string | null, source: SourceStatus | undefined, history: Observation[], pending = false, details: MacroCard['details'] = {}): MacroCard => ({ key, title, value, previousValue, change, unit, status: signalByKey.get(key)?.status ?? 'unknown', explanation, observedAt, source: source?.name ?? 'לא זמין', sourceUrl: source?.url ?? '#', history, pending, details: { ...details, sourceFetchedAt: source?.lastSuccessAt ?? null } });
+  const card = (key: string, title: string, value: number | null, previousValue: number | null, change: number | null, unit: string, explanation: string, observedAt: string | null, source: SourceStatus | undefined, history: Observation[], pending = false, details: MacroCard['details'] = {}): MacroCard => ({ key, title, value, previousValue, change, unit, status: signalByKey.get(key)?.status ?? 'unknown', explanation, observedAt, source: source?.name ?? 'לא זמין', sourceUrl: source?.url ?? '#', sourceUrls: key === 'israel_risk_proxy' ? [BOI_USD_RATE_URL, BOI_CURVE_PAGE, treasuryCsvUrl(new Date().getUTCFullYear(), 'daily_treasury_real_yield_curve')] : source?.url ? [source.url] : [], history, pending, details: { ...details, sourceFetchedAt: source?.lastSuccessAt ?? null } });
+  const riskProxySource = sourceByKey.get('boi_usdils') ? { ...sourceByKey.get('boi_usdils')!, name: 'בנק ישראל + U.S. Treasury', url: BOI_CURVE_PAGE } : undefined;
   const cards: MacroCard[] = [
     card('policy_rate', 'ריבית בנק ישראל', rate?.value ?? null, oldRate?.value ?? null, rate && oldRate ? (rate.value - oldRate.value) * 100 : null, '%', 'משפיעה על הריבית הקצרה; אינה קובעת מכנית את תשואות האג״ח הארוכות.', rate?.observation_date ?? null, sourceByKey.get('boi_policy_rate'), rateRows.map(toObservation), false, { nextDecisionDate }),
     card('cpi_inflation', 'אינפלציה', cpi.yoy, cpi.previousYoy, cpi.mom, '% שנתי', cpi.yoy === null ? 'נדרשת היסטוריית מדד של 12 חודשים לפחות.' : `מדד חודשי ${cpi.mom === null ? '—' : `${round(cpi.mom, 2)}%`}; יעד בנק ישראל ${setting(settings, 'inflation_target_low', 1)}–${setting(settings, 'inflation_target_high', 3)}%.`, cpi.observationDate, sourceByKey.get('cbs_cpi'), cpiRows.map(toObservation), false, { index: cpi.latestIndex, yoy: cpi.yoy, previousYoy: cpi.previousYoy, targetLow: setting(settings, 'inflation_target_low', 1), targetHigh: setting(settings, 'inflation_target_high', 3) }),
     card('inflation_expectations', 'ציפיות אינפלציה', expectationRows[0].at(-1)?.value ?? null, expectationRows[0].at(-2)?.value ?? null, expectationRows[0].length>1 ? expectationRows[0].at(-1)!.value-expectationRows[0].at(-2)!.value : null, '%', 'נתוני הציפיות מתפרסמים מעת לעת; תאריך הפרסום והמקור מוצגים לצד הנתון.', expectationRows[0].at(-1)?.observation_date ?? null, sourceByKey.get('boi_inflation_expectations'), expectationRows[0].map(toObservation)),
-    card('israel_risk_proxy', 'פרוקסי תנאי הסיכון בישראל', signalByKey.get('israel_risk_proxy')?.score ?? null, null, signalByKey.get('israel_risk_proxy')?.score ?? null, 'מדד', 'מדד שקוף המבוסס על תצפיות מאומתות של שער חליפין ותשואות; אין מדובר בציטוט CDS סחיר.', signalByKey.get('israel_risk_proxy')?.observationDate ?? null, sourceByKey.get('boi_usdils'), usdRows.map(toObservation), false, signalByKey.get('israel_risk_proxy')?.value ?? {}),
+    card('israel_risk_proxy', 'פרוקסי תנאי הסיכון בישראל', signalByKey.get('israel_risk_proxy')?.score ?? null, null, signalByKey.get('israel_risk_proxy')?.score ?? null, 'מדד', 'פרוקסי שקוף המשלב דולר/שקל, תשואה ריאלית בישראל ופער תשואות ריאליות בין ישראל לארה״ב; אינו CDS סחיר.', signalByKey.get('israel_risk_proxy')?.observationDate ?? null, riskProxySource, usdRows.map(toObservation), false, signalByKey.get('israel_risk_proxy')?.value ?? {}),
     card('long_real_yield', 'תשואה ריאלית ל-10 שנים', latestReal?.value ?? null, previousReal?.value ?? null, realChange, '%', 'נתון עקום רשמי; שינוי חודשי מחושב מול תצפית המקור הזמינה. מגמת התשואה אינה המלצת השקעה.', latestReal?.date ?? null, sourceByKey.get('boi_real_curve'), real10.map((row) => ({ observationDate: row.date, value: row.value, ingestedAt: row.ingestedAt ?? '', sourceTimestamp: row.sourceTimestamp ?? null, revisionNumber: row.revisionNumber })), false, { tenorYears: 10, changeBps: realChange }),
     card('long_yield_momentum', 'מגמת תשואות ארוכות', trendSignal?.score ?? null, null, trendSignal?.score ?? null, 'נ״ב / חודש מקור', 'המקור הרשמי הוא ממוצע חצי-חודשי. אין דיוק יומי לחישוב 5/20/60 ימי מסחר; כאן מוצגת השוואה לתצפית חודשית קודמת בלבד.', latestReal?.date ?? null, sourceByKey.get('boi_real_curve'), real10.map((row) => ({ observationDate: row.date, value: row.value, ingestedAt: row.ingestedAt ?? '', sourceTimestamp: row.sourceTimestamp ?? null, revisionNumber: row.revisionNumber })), false, trendSignal?.value ?? {}),
   ];
@@ -773,10 +781,13 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
   const us2s10s = { ...market('us_2s10s', curveValues, 'bp', 'us_treasury_nominal', usTreasuryChangesBps(curveRows, 1)), status: curveStatus, source: 'U.S. Treasury', sourceUrl: US_TREASURY_PAGE, derived: true, provenance: 'תשואה ל־10 שנים פחות תשואה ל־2 שנים, בתאריכים חופפים' };
   const differentialSignal = signalByKey.get('il_us_real_yield_differential');
   const diffCurrent = typeof differentialSignal?.value.currentBps === 'number' ? differentialSignal.value.currentBps : null;
-  const differential: MarketSeries = { key:'il_us_real_yield_differential', value:diffCurrent, unit:'bp', observationDate:differentialSignal?.observationDate ?? null, sourceTimestamp:null, ingestedAt:nowIso(), revisionNumber:null, source:'בנק ישראל + FRED', sourceUrl:BOI_REAL_CURVE_URL, status:diffCurrent === null ? 'pending':'ok', changes:{ changeBps:typeof differentialSignal?.value.changeBps==='number'?differentialSignal.value.changeBps:null }, history:[] };
+  const boiRealStatus = sourceByKey.get('boi_real_curve')?.status ?? 'pending';
+  const treasuryRealStatus = sourceByKey.get('us_treasury_real')?.status ?? 'pending';
+  const differentialStatus: SourceStatus['status'] = boiRealStatus === 'error' || treasuryRealStatus === 'error' ? 'error' : boiRealStatus === 'stale' || treasuryRealStatus === 'stale' ? 'stale' : boiRealStatus === 'ok' && treasuryRealStatus === 'ok' && diffCurrent !== null ? 'ok' : 'pending';
+  const differential = createRealYieldDifferential(diffCurrent, differentialSignal, nowIso(), differentialStatus);
   const riskSignal = signalByKey.get('israel_risk_proxy');
   let riskComponents = []; try { riskComponents = JSON.parse(String(riskSignal?.value.components ?? '[]')); } catch { riskComponents=[]; }
-  const riskProxy = { value:riskSignal?.score ?? null, status:riskSignal?.status ?? 'unknown', label:'פרוקסי תנאי הסיכון בישראל' as const, components:riskComponents, coverage:Number(riskSignal?.value.availableComponents ?? 0)/3, explanationHe:riskSignal?.explanationHe ?? 'אין די נתונים מאומתים לחישוב מדד תנאי הסיכון.' };
+  const riskProxy = { value:riskSignal?.score ?? null, status:riskSignal?.status ?? 'unknown', label:'פרוקסי תנאי הסיכון בישראל' as const, source:'בנק ישראל + U.S. Treasury', sourceUrls:[BOI_USD_RATE_URL, BOI_CURVE_PAGE, treasuryCsvUrl(new Date().getUTCFullYear(), 'daily_treasury_real_yield_curve')], provenance:'פרוקסי שקוף המשלב שער דולר/שקל, שינוי בתשואה ריאלית בישראל ושינוי בפער תשואות ריאליות בין ישראל לארה״ב; אינו CDS.', components:riskComponents, coverage:Number(riskSignal?.value.availableComponents ?? 0)/3, explanationHe:riskSignal?.explanationHe ?? 'אין די נתונים מאומתים לחישוב מדד תנאי הסיכון.' };
   const expectationsItems = expIds.map((id,index)=>market(id, expectationRows[index], '%', 'boi_inflation_expectations', { previousChange: expectationRows[index].length>1 ? expectationRows[index].at(-1)!.value-expectationRows[index].at(-2)!.value:null }));
   const regimeHistory=await getRegimeHistory(db);
   const bondUniverse=await getBondUniverse(db);
@@ -916,4 +927,4 @@ export default {
   },
 };
 
-export const __test = { cpiStats, handleManualIngestion, runProductionIngestion };
+export const __test = { cpiStats, createRealYieldDifferential, handleManualIngestion, runProductionIngestion };

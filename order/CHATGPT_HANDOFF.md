@@ -413,3 +413,32 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 
 - Repository verified before rollout: `bond-analyzer`, branch `main`, origin `https://github.com/Comeon2022/bond-analyzer.git`. RAGOps was not accessed. User-provided specs/CSV fixtures remain unstaged.
 - Implementation commit SHA: 0a53102e3b8bec01a2329530bd5622d314dcdfdf (Use official Treasury yield feeds).
+
+## Phase 1P - Remove active FRED provenance - 2026-10-04
+
+### Repository audit and implementation
+
+- Audited the repository for `FRED`, `fred`, `DGS10`, `DFII10`, `DGS2`, and `T10YIE`. Active user-facing/API provenance was found in the real-yield differential, risk-proxy summary/card, and two active U.S.-yield fixtures; the README also described FRED as the current source. These paths now identify U.S. Treasury.
+- `/api/overview.markets.realYieldDifferential` now reports `source: Bank of Israel + U.S. Treasury`, `derived: true`, a formula provenance string, and both BOI and official Treasury real-feed URLs. Its freshness uses BOI real-curve and U.S. Treasury real-feed statuses. Its numeric value and change calculations are unchanged.
+- The risk proxy and its components now include source, source URLs, and provenance. The U.S. real-yield differential component identifies BOI + U.S. Treasury; USD/ILS and Israeli real-yield components identify BOI. The explanation still describes the proxy as a combination of observed indicators and explicitly says it is not CDS. The risk card and detail drawer show the combined sources.
+- Active U.S. nominal/real signal explanations are explicitly set to U.S. Treasury at runtime, independent of previously seeded definition descriptions. The Treasury panel keeps U.S. Treasury source labels and locally derived formulas for breakeven and 2s10s. Updated README active-source wording.
+- Added migration `0007_treasury_provenance_cleanup.sql` to deactivate the historical FRED source and series while preserving observations, and to replace the seeded active signal descriptions/settings text. Existing `0002`/`0005` migration files were not rewritten because they record historical setup.
+- Remaining FRED references are intentional: `worker/sources.ts` parser and series IDs for optional legacy cross-check development; parser fixtures/tests; `worker/index.ts` legacy `fred_` run attribution and `fredCrossCheck: not_run`; historical migrations and handoff notes; and this audit/handoff. None supplies active U.S. market values, source status, or risk freshness. No active U.S. Treasury UI bundle includes the FRED label.
+- Added tests for source labels and URLs on the differential and proxy components, unchanged differential value/change, stale-source propagation, absence of FRED in active Treasury UI/provenance payloads, and the locally derived formulas.
+
+### Verification and deployments
+
+- `npm run typecheck`: passed.
+- `npm test`: passed, 87 tests across 19 files.
+- `npm run build`: passed with production `VITE_API_BASE_URL`.
+- `npx wrangler deploy --dry-run`: passed.
+- Deployed Worker `israel-macro-rates-dashboard`; version `9969a484-5632-4f15-9410-228cafe2f9fd`.
+- Published Pages preview `https://f19da0c6.bond-analyzer-av2.pages.dev`; production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200. Verified its JavaScript bundle contains the production Worker URL and U.S. Treasury label and has no `FRED` string.
+- Verified live `/api/health` is healthy. Live `/api/overview` reports U.S. Treasury for all five U.S. yield fields; breakeven and 2s10s include formula provenance; `realYieldDifferential` reports BOI + U.S. Treasury and both source URLs; risk-proxy metadata identifies BOI and U.S. Treasury components and states it is not CDS. The active provenance subset contained no FRED label.
+
+### Remote D1 migration and Git
+
+- Remote D1 migration `0007_treasury_provenance_cleanup.sql` could not be applied from this session. `npx wrangler d1 migrations apply bond-analyzer-db --remote` failed with Cloudflare API error 7403: The given account is not valid or is not authorized to access this service. Worker and Pages deployments succeeded. Active Worker/API provenance is corrected independently, but the stored legacy FRED source/series enabled flags and seeded signal descriptions will remain until the migration is applied.
+- After authenticating Wrangler with a Cloudflare account/token that has D1 access, run: `npx wrangler d1 migrations apply bond-analyzer-db --remote`.
+- Repository verified as `bond-analyzer`, branch `main`, origin `https://github.com/Comeon2022/bond-analyzer.git`; RAGOps was not accessed. User-provided phase specs and CSVs remain unstaged.
+- Implementation commit SHA: pending.
