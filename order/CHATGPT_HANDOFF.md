@@ -281,6 +281,25 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Implementation commit `71bda4d6fd5bffa806adb85e6f1a5d282f348641` (`Clarify top status and USD ILS labels`) was pushed to `origin/main`. The Git-triggered Pages deployment reported source `71bda4d` but the production alias initially served the previous bundle, so the verified local build was published directly to Pages project `bond-analyzer` on `main`. Deployment `b8e1b4da-1dab-457d-8d45-fa353506fa9d` is available at `https://b8e1b4da.bond-analyzer-av2.pages.dev`. The production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-CtjZL927.js` and `index-j3zxN34W.css`; UTF-8 checks confirmed the `דולר / שקל` and `מצב כולל היום` labels, the plain-language USD/ILS explanation, and the new status/narrative layout CSS.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; RAGOps was not accessed or modified. User-provided specs/CSV files remain unstaged.
 
+## Phase 1L alignment, plain-language cards, and inflation clarity — 2026-10-04
+
+### Implemented
+
+- Aligned the blue overall-status strip and the two executive-brief columns using shared stretch alignment and top-aligned support/pressure groups. The existing one-strip/two-column structure remains; no extra hero boxes were added.
+- Renamed the core metrics section to exactly `מדדי הליבה` and added a concise explanatory subtitle.
+- Added `src/lib/card-plain-language.ts`, a deterministic, metric- and status-specific Hebrew summary layer for all six core cards, including explicit unavailable-data copy. These sentences explain the current signal and its possible relevance to bonds in plain language. The card bands now use this layer instead of the technical source descriptions. They contain no recommendations.
+- Reworked the inflation detail panel into a smaller, more compact section. It separately explains `אינפלציה שנתית` (12-month change) and `מדד המחירים לצרכן` (the index level used to calculate inflation), labels each distinctly, and gives a concise annual-data-missing explanation while still showing an available index. Reduced chart height, metric sizing, and empty-state density.
+- Kept all source calculations, metric values, status classification, and deterministic outlook logic unchanged. Changes are limited to presentation and explanatory copy.
+- Added tests for state-specific deterministic Hebrew card summaries, unavailable values, no recommendation language, core section title, CPI/annual-inflation distinction, missing annual-data copy, and the separate index stat.
+
+### Verification
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (68 tests across 14 files).
+- `npm run build`: passed.
+- `npx wrangler deploy --dry-run`: passed; Wrangler resolved the dashboard D1 and asset bindings. No Worker/API behavior changed.
+- Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`. Only the Phase 1L source, tests, and this handoff are task changes; the user-provided phase specifications and CSVs remain unstaged. RAGOps was not accessed or modified.
+
 ## Phase 1K executive brief rebuild — 2026-10-03
 
 ### Implemented

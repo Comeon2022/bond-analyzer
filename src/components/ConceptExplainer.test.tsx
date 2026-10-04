@@ -69,6 +69,13 @@ describe('Phase 1H accessible concept explanations', () => {
     expect(html).toContain('שלילי');
     expect(html).toContain('אשראי:');
     expect(html).toContain('אין נתון שנתי עדכני');
+    expect(html).toContain('מדדי הליבה');
+    expect(html).not.toContain('ששת מדדי הליבה');
+    expect(html).toContain('אינפלציה שנתית ומדד המחירים לצרכן');
+    expect(html).toContain('קצב השינוי במחירים ב־12 החודשים האחרונים');
+    expect(html).toContain('רמת המדד שממנה מחשבים את האינפלציה');
+    expect(html).toContain('כרגע חסר נתון שנתי עדכני, ולכן מוצג מדד המחירים אך לא קריאת אינפלציה שנתית מלאה.');
+    expect(html).toContain('inflation-index-stat');
     expect(html).toContain('תרחיש בסיס');
     const forwardList = html.slice(html.indexOf('<ul class="forward-list">'), html.indexOf('</ul>', html.indexOf('<ul class="forward-list">')));
     expect(forwardList.match(/<li>/g)).toHaveLength(3);

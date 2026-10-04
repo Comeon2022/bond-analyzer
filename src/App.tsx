@@ -11,6 +11,7 @@ import type { BondBenchmarkResponse, BondDetailResponse, BondHistoryResponse, Cr
 import { loadMacroAndCreditIndependently } from './lib/dashboard-loader';
 import { normalizeCreditOutlookContext } from './lib/credit-outlook';
 import { buildHeroEvidence } from './lib/hero-evidence';
+import { getCoreCardSummary } from './lib/card-plain-language';
 import CreditPanel from './CreditPanel';
 import ConceptExplainer from './components/ConceptExplainer';
 import { CONCEPT_EXPLANATIONS, type ConceptExplanation, type ConceptId } from './lib/concepts';
@@ -109,13 +110,13 @@ function MacroCardView({ card, onOpen }: { card: MacroCard; onOpen: (card: Macro
   return (
     <article className={`signal-card ${status.className} ${card.pending ? 'pending' : ''}`}>
       <div className="card-topline"><span className="card-category">{card.pending ? 'בשלב הבא' : card.key === 'cpi_inflation' ? 'מחירים' : card.key === 'policy_rate' ? 'מדיניות מוניטרית' : 'עקום ממשלתי'}</span><span className={`status-pill ${status.className}`}><SourceDot status={card.pending ? 'pending' : card.status === 'unknown' ? 'pending' : 'ok'} />{status.label}</span></div>
-      <div className="card-title">{card.title}{CARD_CONCEPT[card.key] && <ConceptExplainer concept={CARD_CONCEPT[card.key]} />}</div>
+      <div className="card-title">{card.key === 'cpi_inflation' ? 'אינפלציה שנתית' : card.title}{CARD_CONCEPT[card.key] && <ConceptExplainer concept={CARD_CONCEPT[card.key]} />}</div>
       <div className={`metric-value ${card.value === null ? 'no-value' : ''}`}>{mainValue}</div>
-      {card.key === 'cpi_inflation' && <div className="metric-caption">אינפלציה שנתית · שינוי ב־12 החודשים האחרונים</div>}
+      {card.key === 'cpi_inflation' && <div className="metric-caption">קצב השינוי במחירים ב־12 החודשים האחרונים</div>}
       {card.key === 'long_yield_momentum' && <div className="metric-caption">תנועה בתקופת מקור של כחודש</div>}
       {delta && <div className={`metric-delta ${delta.className}`}>{delta.text}</div>}
       {!delta && card.pending && <div className="metric-delta">מקור רשמי טרם חובר</div>}
-      <div className="card-explanation">{card.explanation}</div>
+      <div className="card-explanation">{getCoreCardSummary(card)}</div>
       <div className="sparkline-wrap"><Sparkline data={card.history} status={card.status} /></div>
       <div className="card-footer"><span>{sourceAvailable ? card.source : 'מקור בתהליך'}</span><span>{dateLabel(card.observedAt)}</span></div>
       <button className="card-detail-button" onClick={() => onOpen(card)}>לקריאה פשוטה ולנתוני המקור</button>
@@ -214,15 +215,15 @@ function EmptyChart() { return <div className="empty-chart"><div className="empt
 function InflationPanel({ data }: { data: OverviewResponse['inflation'] }) {
   const chartData = data.observations.slice(-36).map((point) => ({ date: point.observationDate.slice(0, 7), index: point.value }));
   return <section className="panel inflation-panel">
-    <div className="panel-title"><div><span className="eyebrow">אינפלציה · נתונים רשמיים של הלמ״ס</span><h2>אינפלציה ומדד המחירים <ConceptExplainer concept="cpiIndex" /></h2><p>אינפלציה שנתית היא שינוי המחירים ב־12 חודשים; המדד עצמו הוא רמת המחירים.</p></div><a className="source-link" href="https://www.cbs.gov.il/en/cbsNewBrand/Pages/Api-Indices.aspx" target="_blank" rel="noreferrer">תיעוד API ↗</a></div>
+    <div className="panel-title"><div><span className="eyebrow">נתוני מדד רשמיים של הלמ״ס</span><h2>אינפלציה שנתית ומדד המחירים לצרכן</h2><div className="inflation-intro"><p><b>אינפלציה שנתית</b> היא קצב השינוי במחירים ב־12 החודשים האחרונים.</p><p><b>מדד המחירים לצרכן</b> הוא רמת המדד שממנה מחשבים את האינפלציה. <ConceptExplainer concept="cpiIndex" /></p></div></div><a className="source-link" href="https://www.cbs.gov.il/en/cbsNewBrand/Pages/Api-Indices.aspx" target="_blank" rel="noreferrer">תיעוד API ↗</a></div>
     <div className="inflation-stats">
-      <div className="inflation-stat inflation-stat-primary"><span>אינפלציה שנתית <ConceptExplainer concept="inflation" /></span><b>{data.yoy === null ? 'אין נתון שנתי עדכני' : `${numberLabel(data.yoy)}%`}</b><small>{data.yoy === null ? 'לא מוצגת הערכה חלופית' : `לפי 12 חודשי מדד · יעד ${data.targetLow}–${data.targetHigh}%`}</small></div>
+      <div className={`inflation-stat inflation-stat-primary${data.yoy === null ? ' is-unavailable' : ''}`}><span>אינפלציה שנתית <ConceptExplainer concept="inflation" /></span><b>{data.yoy === null ? 'אין נתון שנתי עדכני' : `${numberLabel(data.yoy)}%`}</b><small>{data.yoy === null ? 'כרגע חסר נתון שנתי עדכני, ולכן מוצג מדד המחירים אך לא קריאת אינפלציה שנתית מלאה.' : `קצב השינוי השנתי במחירים · יעד ${data.targetLow}–${data.targetHigh}%`}</small></div>
+      <div className="inflation-stat inflation-index-stat"><span>מדד המחירים לצרכן</span><b>{data.latestIndex === null ? 'אין נתון מדד זמין' : numberLabel(data.latestIndex, 2)}</b><small>רמת המדד עצמה · {data.observationDate ? dateLabel(data.observationDate) : 'ממתין למדד הרשמי'}</small></div>
       <div className="inflation-stat"><span>שינוי חודשי</span><b>{data.mom === null ? '—' : `${data.mom > 0 ? '+' : ''}${numberLabel(data.mom)}%`}</b><small>לעומת החודש הקודם</small></div>
       <div className="inflation-stat"><span>יעד בנק ישראל</span><b>{data.targetLow}–{data.targetHigh}%</b><small>טווח יעד שנתי</small></div>
-      <div className="inflation-stat"><span>חודש מדד אחרון</span><b>{data.observationDate ? dateLabel(data.observationDate) : '—'}</b><small>ללא השלמה לנתון יומי</small></div>
     </div>
-    <div className="mini-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}><CartesianGrid stroke="#e8edf2" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} minTickGap={34} /><YAxis orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} width={48} domain={['auto', 'auto']} /><Tooltip formatter={(value: number | string) => [numberLabel(Number(value), 3), 'מדד']} contentStyle={{ borderRadius: 8, direction: 'rtl', fontFamily: 'inherit' }} /><Line type="monotone" dataKey="index" name="רמת המדד" stroke="#c18735" strokeWidth={2.2} dot={false} /></LineChart></ResponsiveContainer>{chartData.length < 2 && <div className="chart-overlay">היסטוריית המדד תופיע לאחר קליטת נתוני הלמ״ס</div>}</div>
-    <div className="chart-source"><span>הערכים המקוריים שנשמרים: רמת המדד והחודש שאליו היא מתייחסת.</span><span>נכון ל-{dateLabel(data.observationDate)}</span></div>
+    <div className="mini-chart inflation-mini-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartData} margin={{ top: 5, right: 4, left: 4, bottom: 0 }}><CartesianGrid stroke="#e8edf2" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} minTickGap={34} /><YAxis orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} width={48} domain={['auto', 'auto']} /><Tooltip formatter={(value: number | string) => [numberLabel(Number(value), 3), 'מדד המחירים']} contentStyle={{ borderRadius: 8, direction: 'rtl', fontFamily: 'inherit' }} /><Line type="monotone" dataKey="index" name="רמת המדד" stroke="#c18735" strokeWidth={2.2} dot={false} /></LineChart></ResponsiveContainer>{chartData.length < 2 && <div className="chart-overlay">היסטוריית המדד תופיע לאחר קליטת נתוני הלמ״ס</div>}</div>
+    <div className="chart-source inflation-chart-source"><span>הגרף מציג את רמת מדד המחירים לצרכן; האינפלציה השנתית היא השינוי באחוזים לאורך 12 חודשים.</span><span>נכון ל־{dateLabel(data.observationDate)}</span></div>
   </section>;
 }
 
@@ -490,9 +491,9 @@ function App() {
         <div className="regime-foot"><span>משוקלל לפי הגדרות מרכזיות · מידע חסר אינו נחשב ניטרלי</span><span>עדכון: {dateLabel(data?.generatedAt)}</span></div>
       </section>
 
-      <div className="section-heading"><div><span className="eyebrow">מנוע איתותים · שקוף ומתועד</span><h2>ששת מדדי הליבה</h2></div><span className="heading-note"><span className="info-mark">i</span>לחיצה על כרטיס מציגה את כלל הסיווג והמקור</span></div>
-      <section className="cards-grid" aria-label="ששת מדדי הליבה">{data?.cards.map((card) => <MacroCardView key={card.key} card={card} onOpen={setSelected} />) ?? Array.from({ length: 6 }, (_, index) => <div className="card-skeleton" key={index}><span /><i /><b /><small /></div>)}</section>
-      <section className="panel inflation-feature" aria-label="תמונת מצב האינפלציה"><InflationPanel data={data?.inflation ?? { latestIndex: null, mom: null, yoy: null, previousYoy: null, observationDate: null, targetLow: 1, targetHigh: 3, observations: [] }} /></section>
+      <div className="section-heading"><div><span className="eyebrow">מנוע איתותים · שקוף ומתועד</span><h2>מדדי הליבה</h2></div><span className="heading-note"><span className="info-mark">i</span>המדדים המרכזיים למעקב · כל כרטיס מציג מצב ומקור</span></div>
+      <section className="cards-grid" aria-label="מדדי הליבה">{data?.cards.map((card) => <MacroCardView key={card.key} card={card} onOpen={setSelected} />) ?? Array.from({ length: 6 }, (_, index) => <div className="card-skeleton" key={index}><span /><i /><b /><small /></div>)}</section>
+      <InflationPanel data={data?.inflation ?? { latestIndex: null, mom: null, yoy: null, previousYoy: null, observationDate: null, targetLow: 1, targetHigh: 3, observations: [] }} />
 
       <section className="panel global-markets-panel">
         <div className="panel-title"><div><span className="eyebrow">הקשר שוק בינלאומי</span><h2>דולר / שקל, תשואות ארה״ב ופער התשואות</h2><p>שער הדולר מול השקל לצד נתוני תשואה אמריקאיים ופער התשואות הריאליות.</p></div></div>

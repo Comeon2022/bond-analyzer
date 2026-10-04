@@ -497,3 +497,50 @@ h1, h2, h3, p { margin-top: 0; }
   .briefing-counts { flex-wrap: wrap; white-space: normal; }
   .outlook-lists { grid-template-columns: minmax(0, 1fr); gap: 9px; }
 }
+
+/* Phase 1L: align the hero and clarify/compact core metric and CPI presentations. */
+.briefing-status { align-items: center; align-content: center; }
+.briefing-columns { align-items: stretch; }
+.today-block, .forward-block { align-self: stretch; padding-top: 0; }
+.today-block h2, .forward-block h2 { margin: 0 0 9px; }
+.outlook-lists { align-items: start; margin-top: 10px; }
+.outlook-lists > div { align-self: start; }
+.signal-card { min-height: 270px; padding: 15px 16px 13px; }
+.metric-value { font-size: 32px; }
+.card-explanation { min-height: 0; max-height: 4.5em; overflow: hidden; margin-top: 7px; padding: 7px 9px; border-right-width: 3px; font-size: 13px; font-weight: 500; line-height: 1.5; }
+.inflation-panel { min-height: 0; margin: 12px 0; padding: 12px 15px 9px; }
+.inflation-panel .panel-title { align-items: flex-start; }
+.inflation-panel .panel-title h2 { margin: 0 0 4px; font-size: 20px; line-height: 1.35; }
+.inflation-intro { display: flex; flex-wrap: wrap; gap: 2px 18px; }
+.inflation-intro p { margin: 1px 0; color: #56697a; font-size: 12px; line-height: 1.5; }
+.inflation-intro p b { color: #344c60; font-weight: 650; }
+.inflation-panel > .inflation-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; margin: 9px 0 3px; }
+.inflation-panel .inflation-stat { gap: 2px; padding: 6px 8px; border-bottom: 0; }
+.inflation-panel .inflation-stat > span { color: #536a7d; font-size: 12px; line-height: 1.35; }
+.inflation-panel .inflation-stat b { color: #24394f; font-size: 19px; line-height: 1.3; }
+.inflation-panel .inflation-stat small { color: #738292; font-size: 11px; line-height: 1.4; }
+.inflation-panel .inflation-stat-primary { grid-column: auto; padding: 6px 9px; border: 0; border-right: 3px solid #d5b260; border-radius: 4px; background: #fbf7ec; }
+.inflation-panel .inflation-stat-primary > span { display: flex; align-items: center; gap: 2px; color: #5d512f; font-size: 12px; }
+.inflation-panel .inflation-stat-primary b { color: #493b19; font-size: 21px; }
+.inflation-panel .inflation-stat-primary small { color: #6c6145; }
+.inflation-panel .inflation-stat-primary.is-unavailable b { max-width: 100%; font-size: 14px; font-family: inherit; font-weight: 700; line-height: 1.4; }
+.inflation-mini-chart { height: 78px; margin-top: 3px; }
+.inflation-chart-source { gap: 10px; margin-top: 0; padding-top: 5px; font-size: 11px; }
+@media (max-width: 760px) {
+  .briefing-columns { align-items: start; }
+  .forward-block { align-self: auto; }
+  .inflation-panel > .inflation-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inflation-panel .panel-title { flex-direction: column; }
+}
+@media (max-width: 650px) {
+  .signal-card { min-height: 245px; }
+  .card-explanation { font-size: 12px; }
+  .cards-grid { grid-template-columns: minmax(0, 1fr); }
+  .inflation-panel { padding: 11px 11px 8px; }
+  .inflation-panel .panel-title h2 { font-size: 18px; }
+  .inflation-intro { display: grid; gap: 3px; }
+  .inflation-panel .inflation-stat { padding: 5px 6px; }
+  .inflation-panel .inflation-stat b { font-size: 16px; }
+  .inflation-panel .inflation-stat-primary.is-unavailable b { font-size: 13px; }
+  .inflation-mini-chart { height: 68px; }
+}
