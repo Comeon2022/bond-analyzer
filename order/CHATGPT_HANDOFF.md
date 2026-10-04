@@ -324,6 +324,42 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-BnHGJOPq.js` and `index-DVR4nPG6.css`; UTF-8 bundle checks confirmed the current-rate context, all-session copy, stale-data state, interpretation heading, shekel direction, and chart. The production bundle retained its configured Worker origin. Its live `/api/overview` returned HTTP 200 JSON with a current USD/ILS value and observation date, 429 historical observations, all four lookbacks, and BOI source status `ok`.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; `origin/main` matched the implementation commit at verification. User-provided phase specs/CSVs remain unstaged. RAGOps was not accessed or modified.
 
+## Phase 1N U.S. Treasury context — 2026-10-04
+
+### Implemented
+
+- Extended the existing official FRED CSV adapter to accept `DGS2` and `T10YIE`, alongside existing `DGS10` and `DFII10`. These series use the same revision-aware `macro_observations` storage path and the existing scheduled/manual ingestion pipeline. FRED series links are included in the UI for source attribution.
+- Added additive migration `0005_us_treasury_context.sql` defining the two new series with source codes `DGS2` and `T10YIE` and extending the configured FRED calendar lookback to 450 days. The Worker reads this setting and retains a safe 400-day minimum; the API keeps up to 500 business observations, enough for 1Y charts and 60-session lookbacks.
+- Extended `/api/overview` with `us2yNominal`, `us10yBreakeven`, and derived `us2s10s`, while keeping existing `us10yNominal` and `us10yReal`. The 2s10s history only uses dates present in both DGS10 and DGS2; its value and lookbacks are represented in basis points. All four U.S. yield series expose actual-observation-date lookbacks `1dBp`, `5dBp`, `20dBp`, and `60dBp`.
+- Added the `אג״ח ממשלת ארה״ב` panel with the four requested primary metric cards, trend/status/date, 2Y/10Y/2s10s mini curve, a 1/5/20/60 basis-point explanation, selector for 10Y nominal/real/breakeven and 2Y histories, and 1M/3M/6M/1Y periods only when enough observations exist. Missing observations remain missing; no weekends, holidays, or values are interpolated.
+- Added reusable deterministic interpretation in `src/lib/us-treasury-context.ts`. Yield trends need two available 5/20/60-session directions; a move is material above 5 bp, breakeven uses 3 bp, and opposing material directions classify as mixed. The curve is inverted below 0 bp, flat from 0 to under 25 bp, and rising at 25 bp or more. Current interpretation requires fresh nominal and real yields; stale individual measures do not produce a current direction. The hero can include at most one fresh U.S. 10Y bullet for a 20-session move of at least 25 bp.
+- Added plain Hebrew explainers for 2Y, 10Y nominal, 10Y real, breakeven inflation and 2s10s, plus a visible explanation of possible U.S.-to-Israel bond-market links using cautious, non-causal wording. No investment recommendations or LLM-generated interpretation were introduced.
+- Tests cover DGS2/T10YIE CSV parsing with gaps, aligned-date 2s10s derivation, curve shape, changes in basis points, trend and component wording, staleness, chart coverage, missing-value UI, recommendation language, and hero limits.
+
+### Verification, deployment, and data-ingestion blocker
+
+- `npm run typecheck`: passed.
+- `npm test`: passed (84 tests across 18 files).
+- `npm run build`: passed.
+- `npx wrangler deploy --dry-run`: passed.
+- Applied remote D1 migration `0005_us_treasury_context.sql` successfully.
+- Deployed Worker `israel-macro-rates-dashboard` at `https://israel-macro-rates-dashboard.karu-lior.workers.dev`; version ID `d061418b-3648-4d0d-82c7-eadda48e1ae0`. `/api/health` and `/api/overview` returned HTTP 200; the new market fields and API contract are present.
+- Published Pages project `bond-analyzer` preview `https://786ff348.bond-analyzer-av2.pages.dev`. Production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-BYhg92CY.js` and `index-ZoH8e-k0.css`; bundle checks confirmed the U.S. Treasury panel and configured production Worker origin, and CSS checks confirmed the panel styles.
+- Verified the official FRED CSV endpoint directly for all four series on 2026-10-04. Latest returned observations in the checked date window were: DGS2 `2026-10-01` (4.78), DGS10 `2026-10-01` (5.24), DFII10 `2026-10-01` (2.88), and T10YIE `2026-10-02` (2.36). These direct checks confirm source availability but were not written to D1.
+- **Authenticated production ingestion is pending.** `ADMIN_INGEST_TOKEN` exists as a Cloudflare Worker secret, but its value is write-only and is not available in this workspace or local environment. The deployed `/api/overview` therefore currently returns null/pending for DGS2/T10YIE and null/error for DGS10/DFII10; D1 has no persisted observations for these four macro series. The last recorded DGS10/DFII10 runs failed with source HTTP 520 on 2026-10-02. Do not claim the new data has been ingested until the manual pipeline succeeds.
+- To trigger the existing secure pipeline locally, enter the already configured token without adding it to command history, then share the command response (never the token):
+
+  ```powershell
+  $env:ADMIN_INGEST_TOKEN = Read-Host 'Enter the configured admin ingestion token'
+  try {
+    Invoke-RestMethod -Method Post -Uri 'https://israel-macro-rates-dashboard.karu-lior.workers.dev/api/admin/ingest' -Headers @{ Authorization = "Bearer $env:ADMIN_INGEST_TOKEN" }
+  } finally {
+    Remove-Item Env:ADMIN_INGEST_TOKEN
+  }
+  ```
+
+- Implementation commit `f5cc7b6b9bf2011283a2f3f22f57b519806ff26b` (`Add U.S. Treasury context and curves`) was pushed to `origin/main`. Handoff rollout follow-up is recorded in the next documentation commit. Repository is `bond-analyzer` on `https://github.com/Comeon2022/bond-analyzer.git`; user-provided specs/CSVs remain unstaged. RAGOps was not accessed or modified.
+
 ## Phase 1K executive brief rebuild — 2026-10-03
 
 ### Implemented
