@@ -484,8 +484,8 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npm test`: passed, 21 files and 100 tests.
 - `npm run build`: passed using the production Worker API URL.
 - `npx wrangler deploy --dry-run`: passed.
-- Pages deployed to `https://265a93c4.bond-analyzer-av2.pages.dev` (production branch `main`; deployment `265a93c4-056f-4541-a928-fc198bdd96ad`). Production alias `https://bond-analyzer-av2.pages.dev/` loaded live Worker data and showed no API connection error.
-- Captured and visually inspected a 1440x1200 production screenshot at `C:\Users\Liorkale\Documents\Claude\Projects\StockAnalitics\bond-dashboard-phase1s-production-1440.png`. It shows the six aligned status items, equal today/forward columns with aligned headings and centered divider, aligned support/pressure headings, and no excess lower blue space. The screenshot is stored outside the repository.
+- An initial direct Pages upload was `https://265a93c4.bond-analyzer-av2.pages.dev`; after pushing commit `f0701e9`, Git-connected Pages production deployment `eef45765-82d6-4dd1-807a-78d03cd0c838` became active at `https://eef45765.bond-analyzer-av2.pages.dev`, with the production alias `https://bond-analyzer-av2.pages.dev/`. The Git-connected production screenshot confirmed live Worker data and no API connection error.
+- Captured and visually inspected a 1440x1200 screenshot of the Git-connected production deployment at `C:\Users\Liorkale\Documents\Claude\Projects\StockAnalitics\bond-dashboard-phase1s-git-production-1440.png`. It shows the six aligned status items, equal today/forward columns with aligned headings and centered divider, aligned support/pressure headings, and no excess lower blue space. The screenshot is stored outside the repository.
 - Worker ingestion code did not change in Phase 1S, so the existing Worker deployment remains version `d4682035-0d35-47cc-b77b-a3b7cdc3e99f`; `/api/health` returns `ok: true`, with D1 reachable.
 
 ### CPI production status — still requires operator authentication
