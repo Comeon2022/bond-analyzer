@@ -441,4 +441,4 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - Remote D1 migration `0007_treasury_provenance_cleanup.sql` could not be applied from this session. `npx wrangler d1 migrations apply bond-analyzer-db --remote` failed with Cloudflare API error 7403: The given account is not valid or is not authorized to access this service. Worker and Pages deployments succeeded. Active Worker/API provenance is corrected independently, but the stored legacy FRED source/series enabled flags and seeded signal descriptions will remain until the migration is applied.
 - After authenticating Wrangler with a Cloudflare account/token that has D1 access, run: `npx wrangler d1 migrations apply bond-analyzer-db --remote`.
 - Repository verified as `bond-analyzer`, branch `main`, origin `https://github.com/Comeon2022/bond-analyzer.git`; RAGOps was not accessed. User-provided phase specs and CSVs remain unstaged.
-- Implementation commit SHA: pending.
+- Implementation commit SHA: 1f8ce07c0fc850b9e7de6fc071b8eda594efe730 (Remove active FRED provenance).
