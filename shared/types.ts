@@ -55,6 +55,8 @@ export interface SourceStatus {
   lastSuccessAt: string | null;
   lastErrorAt: string | null;
   lastError: string | null;
+  failureKind?: 'unavailable' | 'timeout' | 'malformed' | null;
+  checkedAt?: string | null;
   observationDate: string | null;
   observationValue: number | null;
 }

@@ -575,6 +575,49 @@ h1, h2, h3, p { margin-top: 0; }
 .inflation-panel .inflation-stat-primary.is-unavailable b { max-width: 100%; font-size: 14px; font-family: inherit; font-weight: 700; line-height: 1.4; }
 .inflation-mini-chart { height: 78px; margin-top: 3px; }
 .inflation-chart-source { gap: 10px; margin-top: 0; padding-top: 5px; font-size: 11px; }
+
+/* Phase 1Q: compact source health and align the executive brief as one unit. */
+.sources-panel { padding: 13px 15px 10px; }
+.sources-panel .panel-title { margin-bottom: 5px; }
+.source-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 7px 1px; text-decoration: none; }
+.source-row-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.source-main { min-width: 0; gap: 8px; color: #344b60; font-size: 13px; font-weight: 650; }
+.source-main .source-dot { flex: 0 0 auto; }
+.source-status-badge { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; background: #e6f2eb; color: #276144; font-size: 11px; font-weight: 700; line-height: 1.5; }
+.source-badge-error { background: #fae9e6; color: #8b3c34; }
+.source-badge-stale, .source-badge-pending { background: #f5f0df; color: #715a21; }
+.source-status-note { margin: 0 0 0 19px; color: #8b443d; font-size: 12px; line-height: 1.45; }
+.source-stale .source-status-note, .source-pending .source-status-note { color: #705d2d; }
+.source-meta { justify-content: flex-start; gap: 14px; padding-left: 19px; color: #66798a; font-size: 11px; text-align: right; }
+.source-policy { font-size: 11px; }
+.briefing-status { min-height: 0; flex-wrap: wrap; justify-content: flex-start; align-items: center; align-content: center; gap: 7px 13px; padding: 7px 0 9px; font-size: 13px; }
+.briefing-status > * { display: inline-flex; min-height: 24px; align-items: center; }
+.briefing-status-item { gap: 3px; white-space: nowrap; }
+.briefing-status > strong + .briefing-status-item::before { content: ''; width: 1px; height: 17px; margin-inline-end: 13px; background: #ffffff45; }
+.briefing-status-item + .briefing-status-item::before, .briefing-counts::before, .briefing-credit::before { content: ''; width: 1px; height: 17px; margin-inline-end: 13px; background: #ffffff45; }
+.briefing-counts { gap: 6px; }
+.briefing-counts i { flex: 0 0 7px; }
+.briefing-columns { align-items: stretch; gap: 18px; }
+.today-block, .forward-block { min-height: 0; padding-top: 0; }
+.forward-block { padding-right: 18px; }
+.today-block h2, .forward-block h2 { margin-bottom: 7px; }
+.outlook-lists { gap: 13px; margin-top: 8px; }
+.regime-panel { padding-bottom: 7px; }
+.regime-foot { margin-top: 8px; padding-top: 6px; }
+@media (max-width: 760px) {
+  .briefing-status { justify-content: flex-start; }
+  .briefing-status-item + .briefing-status-item::before, .briefing-counts::before, .briefing-credit::before { margin-inline-end: 9px; }
+  .forward-block { padding-right: 0; }
+  .source-meta { flex-wrap: wrap; gap: 2px 12px; padding-left: 19px; }
+}
+@media (max-width: 480px) {
+  .briefing-status { align-items: center; }
+  .briefing-status > b { flex-basis: 100%; }
+  .source-row-heading { align-items: flex-start; }
+  .source-main { font-size: 12px; }
+  .source-status-note { margin-left: 0; }
+  .source-meta { padding-left: 0; }
+}
 @media (max-width: 760px) {
   .briefing-columns { align-items: start; }
   .forward-block { align-self: auto; }

@@ -684,7 +684,9 @@ async function getSourceStatuses(db: D1Database): Promise<SourceStatus[]> {
     const obs = curve ?? observation;
     const observationDate = obs?.observation_date ? new Date(`${obs.observation_date}T00:00:00Z`) : null;
     const stale = !observationDate || (Date.now() - observationDate.valueOf()) / 3_600_000 > (series?.staleAfterHours ?? 1080);
-    output.push({ key: source.key, name: source.name, url: source.url, status: latest?.status === 'error' ? 'error' : !latest ? 'pending' : stale ? 'stale' : 'ok', lastSuccessAt: latest?.status === 'success' ? latest.completed_at : null, lastErrorAt: latest?.status === 'error' ? latest.completed_at : null, lastError: latest?.error_message ?? null, observationDate: obs?.observation_date ?? null, observationValue: obs?.value ?? null });
+    const errorText = latest?.status === 'error' ? latest.error_message ?? '' : '';
+    const failureKind = latest?.status !== 'error' ? null : /timeout|timed out|abort/i.test(errorText) ? 'timeout' : /malformed|invalid|empty|no valid|missing .*header|no worksheet/i.test(errorText) ? 'malformed' : 'unavailable';
+    output.push({ key: source.key, name: source.name, url: source.url, status: latest?.status === 'error' ? 'error' : !latest ? 'pending' : stale ? 'stale' : 'ok', lastSuccessAt: latest?.status === 'success' ? latest.completed_at : null, lastErrorAt: latest?.status === 'error' ? latest.completed_at : null, lastError: null, failureKind, checkedAt: latest?.completed_at ?? latest?.started_at ?? null, observationDate: obs?.observation_date ?? null, observationValue: obs?.value ?? null });
   }
   return output;
 }

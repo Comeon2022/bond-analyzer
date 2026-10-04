@@ -442,3 +442,15 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - After authenticating Wrangler with a Cloudflare account/token that has D1 access, run: `npx wrangler d1 migrations apply bond-analyzer-db --remote`.
 - Repository verified as `bond-analyzer`, branch `main`, origin `https://github.com/Comeon2022/bond-analyzer.git`; RAGOps was not accessed. User-provided phase specs and CSVs remain unstaged.
 - Implementation commit SHA: 1f8ce07c0fc850b9e7de6fc071b8eda594efe730 (Remove active FRED provenance).
+
+## Phase 1Q - Source Status UX and Hero Polish (2026-10-04)
+
+- Replaced public raw ingestion error text with a safe `failureKind` category (`unavailable`, `timeout`, or `malformed`); the public `lastError` field is always null. Technical exception details remain in internal ingestion records/logs.
+- Added the latest check timestamp (`checkedAt`) separately from the market observation date. UI labels these independently as observation and check time.
+- Source rows now distinguish source health from data availability, with Hebrew status badges and deterministic Hebrew notes. Failed refreshes continue to show the latest persisted observation when present; no observation is presented as unavailable without exposing an upstream response or code. CPI follows the same behavior.
+- Tightened source rows and improved alignment/spacing for the hero status strip, equal-width current/forward columns, divider, and reduced vertical blue space; mobile layout continues to stack status, current, then forward.
+- No numeric, signal, or regime calculations were changed.
+- Added presentation tests covering friendly error states, no raw upstream errors, retained prior observations, timeout/malformed wording, and distinct observation/check timestamps.
+- Verification: `npm run typecheck`, `npm test` (20 files, 91 tests), `npm run build`, and `npx wrangler deploy --dry-run` all passed.
+- Deployment: Worker plus bundled Pages assets deployed at `https://israel-macro-rates-dashboard.karu-lior.workers.dev`, version `bca5dfee-70d6-43d6-8b25-61ba03bfd962`. Production `/api/overview` and `/api/sources/status` returned successfully for all 8 sources; the public response contained no raw errors, exposed check timestamps, and reported the current CBS CPI source failure as unavailable with no observation.
+- Git: task changes are pending commit/push; target repository was verified as the bond dashboard (`israel-macro-rates-dashboard`) with origin `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`.

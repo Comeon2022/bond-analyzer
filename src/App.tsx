@@ -17,6 +17,7 @@ import { buildUsTreasuryContext, usTreasuryCurveLabel, usTreasuryTrendLabel, typ
 import CreditPanel from './CreditPanel';
 import ConceptExplainer from './components/ConceptExplainer';
 import { CONCEPT_EXPLANATIONS, type ConceptExplanation, type ConceptId } from './lib/concepts';
+import { sourceCheckedAt, sourceStatusLabel, sourceStatusNote } from './lib/source-status';
 
 const CARD_CONCEPT: Record<string, ConceptId> = {
   policy_rate: 'policyRate', cpi_inflation: 'inflation', inflation_expectations: 'inflationExpectations',
@@ -356,9 +357,17 @@ function InflationPanel({ data }: { data: OverviewResponse['inflation'] }) {
   </section>;
 }
 
-function SourceStatusPanel({ sources }: { sources: SourceStatus[] }) {
+export function SourceStatusPanel({ sources }: { sources: SourceStatus[] }) {
   return <section className="panel sources-panel"><div className="panel-title"><div><span className="eyebrow">שקיפות נתונים</span><h2>מקורות ועדכונים</h2></div><span className="source-count">{sources.filter((source) => source.status === 'ok').length} מקורות תקינים</span></div>
-    <div className="source-list">{sources.map((source) => <a className="source-row" href={source.url} key={source.key} target="_blank" rel="noreferrer"><div className="source-main"><SourceDot status={source.status} /><span>{source.name}</span><small>{SOURCE_STATUS[source.status]}</small></div><div className="source-meta"><span>{source.observationDate ? `תצפית ${dateLabel(source.observationDate)}` : source.lastError ?? 'טרם נקלטו נתונים'}</span><span>{source.lastSuccessAt ? `נבדק ${dateLabel(source.lastSuccessAt)}` : ''}</span></div></a>)}</div>
+    <div className="source-list">{sources.map((source) => {
+      const note = sourceStatusNote(source);
+      const checkedAt = sourceCheckedAt(source);
+      return <a className={`source-row source-${source.status}`} href={source.url} key={source.key} target="_blank" rel="noreferrer">
+        <div className="source-row-heading"><div className="source-main"><SourceDot status={source.status} /><span>{source.name}</span></div><span className={`source-status-badge source-badge-${source.status}`}>{sourceStatusLabel(source)}</span></div>
+        {note && <p className="source-status-note">{note}</p>}
+        <div className="source-meta"><span>תצפית: {source.observationDate ? dateLabel(source.observationDate) : 'אין נתון זמין'}</span><span>נבדק: {checkedAt ? dateLabel(checkedAt) : 'טרם נבדק'}</span></div>
+      </a>;
+    })}</div>
     <p className="source-policy">בעת שגיאת מקור נשמרת התצפית התקינה האחרונה, והאות מוצג כלא זמין כשהנתון עובר את סף ההתיישנות.</p>
   </section>;
 }
