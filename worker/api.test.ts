@@ -40,4 +40,15 @@ describe('Worker API health and CORS', () => {
     expect(rejected.status).toBe(403);
     expect(rejected.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
+
+  it('sanitizes upstream ingestion errors on the public status endpoint', async () => {
+    const db = { prepare: () => ({ all: async () => ({ results: [{ jobKey: 'cbs_cpi', status: 'error', errorMessage: 'Source returned HTTP 522', detailsJson: '{}' }] }) }) };
+    const env = { ...testEnv(), DB: db as unknown as D1Database };
+    const response = await worker.fetch(new Request('https://api.example/api/ingestion/status'), env);
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(body).toContain('"errorMessage":"source_ingestion_failed"');
+    expect(body).toContain('"failureKind":"unavailable"');
+    expect(body).not.toContain('HTTP 522');
+  });
 });

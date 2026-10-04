@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseFredSeries, parsePolicyRate, parseTreasuryNominalCurve, parseTreasuryRealCurve } from './sources';
+import { fetchCbsCpiWithFallback, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseCbsCpiXml, parseFredSeries, parsePolicyRate, parseTreasuryNominalCurve, parseTreasuryRealCurve } from './sources';
+
+const cpiXml = `<?xml version="1.0"?><DataSetIndex><month><CodeMonth><code>120010</code><name>CPI</name><date><DateMonth><year>2025</year><month>1</month><currBase><value>100</value></currBase></DateMonth><DateMonth><year>2025</year><month>2</month><currBase><value>101</value></currBase></DateMonth></date></CodeMonth><CodeMonth><code>123456</code><date><DateMonth><year>2025</year><month>2</month><currBase><value>999</value></currBase></DateMonth></date></CodeMonth></month></DataSetIndex>`;
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('source payload normalization', () => {
   it('validates Bank of Israel policy rate responses without substituting defaults', () => {
@@ -9,7 +13,7 @@ describe('source payload normalization', () => {
   });
 
   it('normalizes CBS monthly observations to month-end periods and ignores malformed rows', async () => {
-    const payload = { month: [{ date: [
+    const payload = { month: [{ code: 120010, date: [
       { year: 2026, month: 1, currBase: { value: 100 } },
       { year: 2026, month: 2, currBase: { value: 101 } },
       { year: 2026, month: 3, currBase: { value: 'bad' } },
@@ -18,6 +22,45 @@ describe('source payload normalization', () => {
     expect(rows.map((row) => row.date)).toEqual(['2026-01-31', '2026-02-28']);
     expect(rows[0].value).toBe(100);
     expect(rows[0].hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(rows[0].source).toBe('CBS');
+  });
+
+  it('parses official CBS XML only for the verified headline series and keeps actual monthly dates', async () => {
+    const rows = await parseCbsCpiXml(cpiXml);
+    expect(rows.map(({ date, value }) => [date, value])).toEqual([['2025-01-31', 100], ['2025-02-28', 101]]);
+    const jsonRows = await parseCbsCpi({ month: [{ code: 120010, date: [{ year: 2025, month: 1, currBase: { value: 100 } }] }] });
+    expect(rows[0].hash).toBe(jsonRows[0].hash);
+    await expect(parseCbsCpiXml(cpiXml.replaceAll('120010', '120011'))).rejects.toThrow(/does not identify/);
+  });
+
+  it('sends CBS User-Agent and falls back from failed JSON transport to official XML', async () => {
+    const calls: Request[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(new Request(input, init));
+      return calls.length === 1 ? new Response('upstream unavailable', { status: 522 }) : new Response(cpiXml, { status: 200, headers: { 'content-type': 'application/xml' } });
+    }));
+    const result = await fetchCbsCpiWithFallback('https://cbs.example/price?format=json', 'https://cbs.example/price?format=xml');
+    expect(result.formatUsed).toBe('xml');
+    expect(result.rows).toHaveLength(2);
+    expect(calls.map((request) => request.headers.get('user-agent'))).toEqual([
+      'bond-analyzer/1.0 (Israel macro dashboard)', 'bond-analyzer/1.0 (Israel macro dashboard)',
+    ]);
+    expect(calls[0].headers.get('accept')).toContain('application/json');
+  });
+
+  it('uses valid CBS JSON as the primary response without requesting XML', async () => {
+    const payload = JSON.stringify({ month: [{ code: 120010, date: [{ year: 2025, month: 1, currBase: { value: 100 } }] }] });
+    const fetchMock = vi.fn(async () => new Response(payload, { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await fetchCbsCpiWithFallback('https://cbs.example/json', 'https://cbs.example/xml');
+    expect(result.formatUsed).toBe('json');
+    expect(result.rows[0]).toMatchObject({ date: '2025-01-31', value: 100, source: 'CBS' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses JSON first and reports a sanitized failure when both CBS formats fail', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('gateway error', { status: 522 })));
+    await expect(fetchCbsCpiWithFallback('https://cbs.example/json', 'https://cbs.example/xml')).rejects.toThrow('CBS_CPI_UNAVAILABLE');
   });
 
 

@@ -7,6 +7,7 @@ export interface NormalizedObservation {
   value: number;
   sourceTimestamp: string | null;
   hash: string;
+  source?: 'CBS';
 }
 
 export interface YieldPoint {
@@ -52,7 +53,9 @@ export async function parseCbsCpi(payload: unknown, sourceTimestamp: string | nu
   const rows: NormalizedObservation[] = [];
   for (const group of root.month) {
     if (!group || typeof group !== 'object') continue;
-    const dates = (group as { date?: unknown }).date;
+    const typedGroup = group as { code?: unknown; date?: unknown };
+    if (Number(typedGroup.code) !== 120010) continue;
+    const dates = typedGroup.date;
     if (!Array.isArray(dates)) continue;
     for (const item of dates) {
       if (!item || typeof item !== 'object') continue;
@@ -63,11 +66,75 @@ export async function parseCbsCpi(payload: unknown, sourceTimestamp: string | nu
       const value = Number(currBase?.value);
       if (!Number.isInteger(year) || month < 1 || month > 12 || !Number.isFinite(value) || value <= 0) continue;
       const date = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-      rows.push({ date, value, sourceTimestamp, hash: await sha256Hex(new TextEncoder().encode(JSON.stringify(item))) });
+      rows.push({ date, value, sourceTimestamp, hash: await cpiObservationHash(date, value), source: 'CBS' });
     }
   }
   if (!rows.length) throw new Error('CBS CPI payload contained no valid index levels');
-  return rows.sort((a, b) => a.date.localeCompare(b.date));
+  return [...new Map(rows.map((row) => [row.date, row])).values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function cpiObservationHash(date: string, value: number): Promise<string> {
+  return sha256Hex(new TextEncoder().encode(`120010|${date}|${value}`));
+}
+
+function xmlTag(block: string, tag: string): string | null {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return block.match(new RegExp(`<${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)</${escaped}>`, 'i'))?.[1]?.trim() ?? null;
+}
+
+export async function parseCbsCpiXml(xml: string, sourceTimestamp: string | null = null): Promise<NormalizedObservation[]> {
+  if (!/<DataSetIndex\b/i.test(xml)) throw new Error('CBS CPI XML has an unexpected document root');
+  const groups = [...xml.matchAll(/<CodeMonth\b[^>]*>([\s\S]*?)<\/CodeMonth>/gi)];
+  const matching = groups.filter(([, block]) => Number(xmlTag(block, 'code')) === 120010);
+  if (!matching.length) throw new Error('CBS CPI XML does not identify headline CPI series 120010');
+  const observations: NormalizedObservation[] = [];
+  for (const [, group] of matching) {
+    for (const [, dateBlock] of group.matchAll(/<DateMonth\b[^>]*>([\s\S]*?)<\/DateMonth>/gi)) {
+      const year = Number(xmlTag(dateBlock, 'year'));
+      const month = Number(xmlTag(dateBlock, 'month'));
+      const valueBlock = xmlTag(dateBlock, 'currBase');
+      const value = Number(valueBlock === null ? NaN : xmlTag(valueBlock, 'value'));
+      if (!Number.isInteger(year) || year < 1900 || month < 1 || month > 12 || !Number.isFinite(value) || value <= 0) continue;
+      const date = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+      observations.push({ date, value, sourceTimestamp, hash: await cpiObservationHash(date, value), source: 'CBS' });
+    }
+  }
+  if (!observations.length) throw new Error('CBS CPI XML contains no valid headline index observations');
+  return [...new Map(observations.map((row) => [row.date, row])).values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export async function fetchCbsCpi(url: string, format: 'json' | 'xml'): Promise<{ text: string; rawHash: string; sourceUrl: string; sourceTimestamp: string | null }> {
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(25_000),
+    headers: { 'user-agent': 'bond-analyzer/1.0 (Israel macro dashboard)', accept: 'application/json, application/xml;q=0.9' },
+  });
+  if (!response.ok) throw new Error(`Source returned HTTP ${response.status}`);
+  const text = await response.text();
+  if (!text.trim()) throw new Error('CBS CPI source returned an empty response');
+  if (format === 'json') JSON.parse(text);
+  else if (!/<DataSetIndex\b/i.test(text)) throw new Error('CBS CPI source returned malformed XML');
+  const lastModified = response.headers.get('last-modified');
+  return { text, rawHash: await sha256Hex(new TextEncoder().encode(text)), sourceUrl: url, sourceTimestamp: lastModified && Number.isFinite(Date.parse(lastModified)) ? new Date(lastModified).toISOString() : null };
+}
+
+export async function fetchCbsCpiWithFallback(jsonUrl: string, xmlUrl: string): Promise<{ rows: NormalizedObservation[]; response: Awaited<ReturnType<typeof fetchCbsCpi>>; formatUsed: 'json' | 'xml' }> {
+  let jsonFailure: unknown;
+  try {
+    const response = await fetchCbsCpi(jsonUrl, 'json');
+    const rows = await parseCbsCpi(JSON.parse(response.text), response.sourceTimestamp);
+    return { rows, response, formatUsed: 'json' };
+  } catch (error) {
+    jsonFailure = error;
+  }
+  try {
+    const response = await fetchCbsCpi(xmlUrl, 'xml');
+    const rows = await parseCbsCpiXml(response.text, response.sourceTimestamp);
+    return { rows, response, formatUsed: 'xml' };
+  } catch (xmlFailure) {
+    const failures = [jsonFailure, xmlFailure].map((failure) => failure instanceof Error ? failure.message : 'unknown');
+    const failureKind = failures.some((message) => /timeout|timed out|abort/i.test(message)) ? 'timeout' : failures.some((message) => /malformed|missing|no valid|unexpected document|does not identify/i.test(message)) ? 'malformed' : 'unavailable';
+    throw new Error(`CBS_CPI_${failureKind.toUpperCase()}`);
+  }
 }
 
 export function excelDate(value: unknown): string | null {

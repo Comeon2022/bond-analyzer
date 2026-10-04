@@ -604,12 +604,13 @@ function App() {
       <section className="regime-panel" aria-labelledby="regime-title">
         <div className="executive-brief">
           <div className="briefing-status" role="status" aria-label="סיכום מצב השוק">
-            <b>מצב כולל היום</b>
-            <strong>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</strong>
-            <span className="briefing-status-item">{outlook?.confidenceLabel ?? 'ביטחון ממתין'} <ConceptExplainer concept="confidence" /></span>
-            <span className="briefing-status-item">כיסוי {data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'} <ConceptExplainer concept="signalCoverage" /></span>
-            <span className="briefing-counts"><i className="dot-green" />{data?.regime.green ?? '—'} חיובי <i className="dot-yellow" />{data?.regime.yellow ?? '—'} מעורבים <i className="dot-red" />{data?.regime.red ?? '—'} שלילי</span>
-            <span className="briefing-credit">אשראי: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</span>
+            <span className="briefing-overall"><b>מצב כולל היום</b><strong>{data ? regimeLabel(data.regime.status) : 'ממתין לנתוני שוק'}</strong></span>
+            <span className="briefing-status-details">
+              <span className="briefing-status-item">{outlook?.confidenceLabel ?? 'ביטחון ממתין'} <ConceptExplainer concept="confidence" /></span>
+              <span className="briefing-status-item">כיסוי {data ? `${data.regime.coveragePct.toLocaleString('he-IL')}%` : '—'} <ConceptExplainer concept="signalCoverage" /></span>
+              <span className="briefing-counts"><i className="dot-green" />{data?.regime.green ?? '—'} חיובי <i className="dot-yellow" />{data?.regime.yellow ?? '—'} מעורבים <i className="dot-red" />{data?.regime.red ?? '—'} שלילי</span>
+              <span className="briefing-credit">אשראי: {creditLoading ? 'טוען' : outlook?.creditStatus ?? 'לא זמין'}</span>
+            </span>
           </div>
           <div className="briefing-columns">
             <section className="today-block" aria-labelledby="regime-title">

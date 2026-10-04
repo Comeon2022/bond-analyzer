@@ -101,6 +101,32 @@ describe('Phase 1H accessible concept explanations', () => {
     expect(html).toContain('אשראי:');
   });
 
+  it('keeps hero status semantics in order and defines equal columns and aligned support/pressure lists', () => {
+    const html = renderToStaticMarkup(<App />);
+    const statusStart = html.indexOf('class="briefing-status"');
+    const row = html.slice(statusStart, html.indexOf('<div class="briefing-columns"', statusStart));
+    const order = [
+      row.indexOf('<b>'), row.indexOf('<strong>'), row.indexOf('class="briefing-status-item"'),
+      row.indexOf('class="briefing-status-item"', row.indexOf('class="briefing-status-item"') + 1),
+      row.indexOf('class="briefing-counts"'), row.indexOf('class="briefing-credit"'),
+    ];
+    expect(order.every((position) => position >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(row).toContain('מצב כולל היום');
+    expect(row).toContain('כיסוי');
+    expect(row).toContain('אשראי:');
+    expect((html.match(/איפה אנחנו היום/g) ?? [])).toHaveLength(1);
+    expect((html.match(/מבט קדימה/g) ?? [])).toHaveLength(1);
+    expect(html).toContain('class="support-list"');
+    expect(html).toContain('class="pressure-list"');
+    const columns = html.indexOf('class="briefing-columns"');
+    const current = html.indexOf('class="today-block"');
+    const forward = html.indexOf('class="forward-block"');
+    expect(columns).toBeGreaterThanOrEqual(0);
+    expect(columns).toBeLessThan(current);
+    expect(current).toBeLessThan(forward);
+  });
+
   it('uses clear USD/ILS wording and provides plain-language explanations for the global market series', () => {
     const html = renderToStaticMarkup(<App />);
     expect(seriesLabel('usd_ils')).toBe('דולר / שקל');

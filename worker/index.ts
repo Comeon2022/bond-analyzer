@@ -5,7 +5,7 @@ import { deriveUs10yBreakeven, deriveUs2s10s, usTreasuryChangesBps } from '../sh
 import type { BondMarketRecord, BondFilters, LinkageType } from '../shared/bonds';
 import { quoteAgeBusinessDays, applyBondFilters, matchGovernmentBenchmark, creditSpreadBp, spreadPerDuration } from '../shared/bonds';
 import { bondSourceStatus } from './bond-source';
-import { fetchJson, fetchText, fetchWorkbook, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parsePolicyRate, parseTreasuryNominalCurve, parseTreasuryRealCurve } from './sources';
+import { fetchCbsCpiWithFallback, fetchJson, fetchText, fetchWorkbook, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parsePolicyRate, parseTreasuryNominalCurve, parseTreasuryRealCurve } from './sources';
 import { BOI_SECDWH_CSV_URL, BOI_SECDWH_DSD_URL, BOI_SECDWH_FLOW_URL, BOI_SECDWH_PAGE_URL, creditChanges, creditChangeBullet, fetchBoiXml, isCreditSeriesStale, parseBoiCodelist, parseBoiCreditCsv, parseBoiDsdCodelistRefs, resolveOfficialLabel, type CreditMetadata } from './credit';
 
 export interface Env { DB: D1Database; ASSETS: Fetcher; TASE_DATAHUB_API_KEY?: string; TASE_DATAHUB_BASE_URL?: string; ALLOWED_ORIGINS?: string; ADMIN_INGEST_TOKEN?: string; }
@@ -22,7 +22,8 @@ const BOI_EXPECTATIONS_URL = 'https://kamakama.gov.il/boi_files/Statistics/shcf1
 const BOI_EXPECTATIONS_PAGE = 'https://boi.org.il/en/economic-roles/statistics/inflation-expectations-and-inflation-forecasts/inflation-expectations-and-inflation-forecasts/';
 const US_TREASURY_NOMINAL_CSV_URL = 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv';
 const US_TREASURY_PAGE = 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates';
-const CBS_CPI_URL = 'https://api.cbs.gov.il/index/data/price?id=120010&format=json&download=false&lang=en&last=240&PageSize=300&coef=true';
+const CBS_CPI_JSON_URL = 'https://api.cbs.gov.il/index/data/price?id=120010&format=json&download=false&lang=he&last=240&PageSize=300&coef=true';
+const CBS_CPI_XML_URL = 'https://api.cbs.gov.il/index/data/price?id=120010&format=xml&download=false&lang=he&last=240&PageSize=300&coef=true';
 const BOI_NOMINAL_CURVE_URL = 'https://boi.org.il/boi_files/Statistics/shcd08_e.xls';
 const BOI_REAL_CURVE_URL = 'https://boi.org.il/boi_files/Statistics/shcd07_e.xls';
 const BOI_CURVE_PAGE = 'https://boi.org.il/en/economic-roles/statistics/bonds-and-central-bank-bills-makam/bonds-and-central-bank-bills-makam-yields-to-maturity/';
@@ -96,8 +97,7 @@ async function ingestPolicyRate(db: D1Database): Promise<void> {
 
 async function ingestCpi(db: D1Database): Promise<void> {
   await runWithStatus(db, 'cbs_cpi', async (startedAt) => {
-    const response = await fetchJson<unknown>(CBS_CPI_URL);
-    const rows = await parseCbsCpi(response.body);
+    const { rows, response, formatUsed } = await fetchCbsCpiWithFallback(CBS_CPI_JSON_URL, CBS_CPI_XML_URL);
     const writes: D1PreparedStatement[] = [];
     let changed = 0;
     for (const row of rows) {
@@ -108,7 +108,7 @@ async function ingestCpi(db: D1Database): Promise<void> {
       const results = await db.batch(writes.slice(index, index + 100));
       changed += results.reduce((sum, result) => sum + result.meta.changes, 0);
     }
-    return { read: rows.length, written: changed, details: { sourceUrl: response.sourceUrl, payloadHash: response.rawHash, observationThrough: rows.at(-1)?.date } };
+    return { read: rows.length, written: changed, details: { sourceUrl: response.sourceUrl, payloadHash: response.rawHash, formatUsed, rowsRead: rows.length, rowsWritten: changed, latestDate: rows.at(-1)?.date ?? null, observationThrough: rows.at(-1)?.date ?? null } };
   });
 }
 
@@ -236,11 +236,11 @@ async function runProductionIngestion(db: D1Database): Promise<void> {
   await persistRegimeSnapshot(db, overview);
 }
 
-interface ManualIngestionRunDb { job_key: string; status: string; records_read: number; records_written: number; details_json: string | null; }
+interface ManualIngestionRunDb { job_key: string; status: string; records_read: number; records_written: number; details_json: string | null; error_message: string | null; }
 let manualIngestionRunning = false;
 
 async function manualIngestionSources(db: D1Database, startedAt: string) {
-  const result = await db.prepare('SELECT job_key,status,records_read,records_written,details_json FROM ingestion_runs WHERE started_at >= ? ORDER BY started_at').bind(startedAt).all<ManualIngestionRunDb>();
+  const result = await db.prepare('SELECT job_key,status,records_read,records_written,details_json,error_message FROM ingestion_runs WHERE started_at >= ? ORDER BY started_at').bind(startedAt).all<ManualIngestionRunDb>();
   const sources: Record<string, Record<string, unknown>> = {};
   for (const run of result.results) {
     let details: Record<string, unknown> = {};
@@ -248,6 +248,13 @@ async function manualIngestionSources(db: D1Database, startedAt: string) {
     const key = run.job_key === 'boi_credit_spreads' ? 'boiCreditSpreads' : run.job_key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
     const source: Record<string, unknown> = { ok: run.status === 'success', rowsRead: run.records_read ?? 0, rowsWritten: run.records_written ?? 0 };
     if (run.job_key.startsWith('us_treasury_')) source.latestDate = typeof details.latestDate === 'string' ? details.latestDate : null;
+    if (run.job_key === 'cbs_cpi') {
+      source.formatUsed = details.formatUsed === 'xml' || details.formatUsed === 'json' ? details.formatUsed : null;
+      source.rowsRead = run.records_read ?? 0;
+      source.rowsWritten = run.records_written ?? 0;
+      source.latestDate = typeof details.latestDate === 'string' ? details.latestDate : null;
+      if (run.status !== 'success') source.failureKind = /CBS_CPI_TIMEOUT/.test(run.error_message ?? '') ? 'timeout' : /CBS_CPI_MALFORMED/.test(run.error_message ?? '') ? 'malformed' : 'unavailable';
+    }
     if (run.job_key === 'boi_credit_spreads') {
       source.rowsFetched = typeof details.rowsFetched === 'number' ? details.rowsFetched : null;
       source.spreadRows = run.records_read ?? 0;
@@ -755,7 +762,7 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
   const previousReal = comparisonDate ? real10.find((row) => row.date === comparisonDate) ?? null : null;
   const realChange = typeof realSignal?.score === 'number' ? realSignal.score : null;
   const trendSignal = signalByKey.get('long_yield_momentum');
-  const card = (key: string, title: string, value: number | null, previousValue: number | null, change: number | null, unit: string, explanation: string, observedAt: string | null, source: SourceStatus | undefined, history: Observation[], pending = false, details: MacroCard['details'] = {}): MacroCard => ({ key, title, value, previousValue, change, unit, status: signalByKey.get(key)?.status ?? 'unknown', explanation, observedAt, source: source?.name ?? 'לא זמין', sourceUrl: source?.url ?? '#', sourceUrls: key === 'israel_risk_proxy' ? [BOI_USD_RATE_URL, BOI_CURVE_PAGE, treasuryCsvUrl(new Date().getUTCFullYear(), 'daily_treasury_real_yield_curve')] : source?.url ? [source.url] : [], history, pending, details: { ...details, sourceFetchedAt: source?.lastSuccessAt ?? null } });
+  const card = (key: string, title: string, value: number | null, previousValue: number | null, change: number | null, unit: string, explanation: string, observedAt: string | null, source: SourceStatus | undefined, history: Observation[], pending = false, details: MacroCard['details'] = {}): MacroCard => ({ key, title, value, previousValue, change, unit, status: signalByKey.get(key)?.status ?? 'unknown', explanation, observedAt, source: key === 'cpi_inflation' && source ? 'הלשכה המרכזית לסטטיסטיקה (הלמ״ס)' : source?.name ?? 'לא זמין', sourceUrl: source?.url ?? '#', sourceUrls: key === 'israel_risk_proxy' ? [BOI_USD_RATE_URL, BOI_CURVE_PAGE, treasuryCsvUrl(new Date().getUTCFullYear(), 'daily_treasury_real_yield_curve')] : source?.url ? [source.url] : [], history, pending, details: { ...details, sourceFetchedAt: source?.lastSuccessAt ?? null } });
   const riskProxySource = sourceByKey.get('boi_usdils') ? { ...sourceByKey.get('boi_usdils')!, name: 'בנק ישראל + U.S. Treasury', url: BOI_CURVE_PAGE } : undefined;
   const cards: MacroCard[] = [
     card('policy_rate', 'ריבית בנק ישראל', rate?.value ?? null, oldRate?.value ?? null, rate && oldRate ? (rate.value - oldRate.value) * 100 : null, '%', 'משפיעה על הריבית הקצרה; אינה קובעת מכנית את תשואות האג״ח הארוכות.', rate?.observation_date ?? null, sourceByKey.get('boi_policy_rate'), rateRows.map(toObservation), false, { nextDecisionDate }),
@@ -881,7 +888,12 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/api/sources/status') return json({ sources: await getSourceStatuses(env.DB) });
   if (request.method === 'GET' && url.pathname === '/api/ingestion/status') {
     const runs = await env.DB.prepare('SELECT job_key AS jobKey, started_at AS startedAt, completed_at AS completedAt, status, records_read AS recordsRead, records_written AS recordsWritten, error_message AS errorMessage, details_json AS detailsJson FROM ingestion_runs ORDER BY started_at DESC LIMIT 40').all();
-    return json({ runs: runs.results });
+    return json({ runs: runs.results.map((run) => {
+      const row = run as Record<string, unknown>;
+      const raw = typeof row.errorMessage === 'string' ? row.errorMessage : '';
+      const failureKind = !raw ? null : /timeout|timed out|abort/i.test(raw) ? 'timeout' : /malformed|invalid|empty|no valid/i.test(raw) ? 'malformed' : 'unavailable';
+      return { ...row, errorMessage: raw ? 'source_ingestion_failed' : null, failureKind };
+    }) });
   }
   return json({ error: 'Not found' }, 404);
 }
@@ -929,4 +941,4 @@ export default {
   },
 };
 
-export const __test = { cpiStats, createRealYieldDifferential, handleManualIngestion, runProductionIngestion };
+export const __test = { cpiStats, createRealYieldDifferential, handleManualIngestion, manualIngestionSources, runProductionIngestion };
