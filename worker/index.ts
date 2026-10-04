@@ -1,11 +1,11 @@
 import { inflationSignal, percentChange, weightedRegime } from '../shared/calculations';
 import type { MacroCard, MarketSeries, Observation, OverviewResponse, Signal, SignalStatus, SourceStatus, YieldPoint } from '../shared/types';
 import { buildChangeSummary, lookbackChange, lookbackPercentChange, riskConditionsProxy } from '../shared/phase1b';
-import { deriveUs2s10s, usTreasuryChangesBps } from '../shared/us-treasury';
+import { deriveUs10yBreakeven, deriveUs2s10s, usTreasuryChangesBps } from '../shared/us-treasury';
 import type { BondMarketRecord, BondFilters, LinkageType } from '../shared/bonds';
 import { quoteAgeBusinessDays, applyBondFilters, matchGovernmentBenchmark, creditSpreadBp, spreadPerDuration } from '../shared/bonds';
 import { bondSourceStatus } from './bond-source';
-import { fetchJson, fetchText, fetchWorkbook, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseFredSeries, parsePolicyRate, type FredSeriesId } from './sources';
+import { fetchJson, fetchText, fetchWorkbook, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parsePolicyRate, parseTreasuryNominalCurve, parseTreasuryRealCurve } from './sources';
 import { BOI_SECDWH_CSV_URL, BOI_SECDWH_DSD_URL, BOI_SECDWH_FLOW_URL, BOI_SECDWH_PAGE_URL, creditChanges, creditChangeBullet, fetchBoiXml, isCreditSeriesStale, parseBoiCodelist, parseBoiCreditCsv, parseBoiDsdCodelistRefs, resolveOfficialLabel, type CreditMetadata } from './credit';
 
 export interface Env { DB: D1Database; ASSETS: Fetcher; TASE_DATAHUB_API_KEY?: string; TASE_DATAHUB_BASE_URL?: string; ALLOWED_ORIGINS?: string; ADMIN_INGEST_TOKEN?: string; }
@@ -20,7 +20,8 @@ const BOI_USD_RATE_URL = 'https://boi.org.il/PublicApi/GetExchangeRate?key=USD';
 const BOI_USD_HISTORY_URL = 'https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0/RER_USD_ILS';
 const BOI_EXPECTATIONS_URL = 'https://kamakama.gov.il/boi_files/Statistics/shcf10_e.xls';
 const BOI_EXPECTATIONS_PAGE = 'https://boi.org.il/en/economic-roles/statistics/inflation-expectations-and-inflation-forecasts/inflation-expectations-and-inflation-forecasts/';
-const FRED_CSV_URL = 'https://fred.stlouisfed.org/graph/fredgraph.csv';
+const US_TREASURY_NOMINAL_CSV_URL = 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv';
+const US_TREASURY_PAGE = 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates';
 const CBS_CPI_URL = 'https://api.cbs.gov.il/index/data/price?id=120010&format=json&download=false&lang=en&last=240&PageSize=300&coef=true';
 const BOI_NOMINAL_CURVE_URL = 'https://boi.org.il/boi_files/Statistics/shcd08_e.xls';
 const BOI_REAL_CURVE_URL = 'https://boi.org.il/boi_files/Statistics/shcd07_e.xls';
@@ -67,7 +68,7 @@ async function runWithStatus(db: D1Database, jobKey: string, work: (startedAt: s
     const completedAt = nowIso();
     await db.prepare('UPDATE ingestion_runs SET completed_at = ?, status = ?, records_read = ?, records_written = ?, details_json = ? WHERE id = ?')
       .bind(completedAt, 'success', result.read, result.written, JSON.stringify(result.details ?? {}), runId).run();
-    const sourceKey = jobKey.startsWith('cbs_') ? 'israel_cbs' : jobKey.startsWith('fred_') ? 'fred' : jobKey.startsWith('boi_credit_') ? 'boi_credit_spreads' : 'bank_of_israel';
+    const sourceKey = jobKey.startsWith('cbs_') ? 'israel_cbs' : jobKey.startsWith('fred_') ? 'fred' : jobKey.startsWith('us_treasury_') ? 'us_treasury' : jobKey.startsWith('boi_credit_') ? 'boi_credit_spreads' : 'bank_of_israel';
     await db.prepare('UPDATE data_sources SET last_success_at = ?, last_error_at = NULL, last_error_message = NULL, updated_at = ? WHERE key = ?')
       .bind(completedAt, completedAt, sourceKey).run();
   } catch (error) {
@@ -75,7 +76,7 @@ async function runWithStatus(db: D1Database, jobKey: string, work: (startedAt: s
     const message = error instanceof Error ? error.message : 'Unknown source error';
     console.error('Scheduled ingestion job failed', jobKey, message.slice(0, 500));
     await db.prepare('UPDATE ingestion_runs SET completed_at = ?, status = ?, error_message = ? WHERE id = ?').bind(completedAt, 'error', message.slice(0, 500), runId).run();
-    const sourceKey = jobKey.startsWith('cbs_') ? 'israel_cbs' : jobKey.startsWith('fred_') ? 'fred' : jobKey.startsWith('boi_credit_') ? 'boi_credit_spreads' : 'bank_of_israel';
+    const sourceKey = jobKey.startsWith('cbs_') ? 'israel_cbs' : jobKey.startsWith('fred_') ? 'fred' : jobKey.startsWith('us_treasury_') ? 'us_treasury' : jobKey.startsWith('boi_credit_') ? 'boi_credit_spreads' : 'bank_of_israel';
     await db.prepare('UPDATE data_sources SET last_error_at = ?, last_error_message = ?, updated_at = ? WHERE key = ?').bind(completedAt, message.slice(0, 500), completedAt, sourceKey).run();
   }
 }
@@ -155,21 +156,43 @@ async function ingestUsdIls(db: D1Database): Promise<void> {
   });
 }
 
-async function fredWindowUrl(db: D1Database, seriesId: FredSeriesId): Promise<string> {
+async function treasuryYearUrls(db: D1Database): Promise<{ startDate: string; urls: number[] }> {
   const settings = await getDashboardSettings(db);
   const calendarDays = Math.max(400, Math.floor(setting(settings, 'us_yield_lookback_calendar_days', 450)));
-  const start = new Date();
-  start.setUTCDate(start.getUTCDate() - calendarDays);
-  return `${FRED_CSV_URL}?id=${seriesId}&cosd=${start.toISOString().slice(0, 10)}&coed=${todayUtc()}`;
+  const start = new Date(); start.setUTCDate(start.getUTCDate() - calendarDays);
+  const currentYear = new Date().getUTCFullYear();
+  return { startDate: start.toISOString().slice(0, 10), urls: Array.from({ length: currentYear - start.getUTCFullYear() + 1 }, (_, index) => start.getUTCFullYear() + index) };
 }
 
-async function ingestFredSeries(db: D1Database, seriesId: FredSeriesId, seriesKey: 'us_2y_nominal' | 'us_10y_nominal' | 'us_10y_real' | 'us_10y_breakeven'): Promise<void> {
-  await runWithStatus(db, `fred_${seriesId.toLowerCase()}`, async (startedAt) => {
-    const sourceUrl = await fredWindowUrl(db, seriesId);
-    const response = await fetchText(sourceUrl);
-    const rows = await parseFredSeries(response.text, seriesId, response.sourceTimestamp);
-    const written = await persistMacroRows(db, seriesKey, rows, startedAt);
-    return { read: rows.length, written, details: { sourceUrl, seriesId, payloadHash: response.rawHash, observationThrough: rows.at(-1)?.date } };
+function treasuryCsvUrl(year: number, curve: 'daily_treasury_yield_curve' | 'daily_treasury_real_yield_curve'): string {
+  return `${US_TREASURY_NOMINAL_CSV_URL}/${year}/all?type=${curve}`;
+}
+
+async function ingestUsTreasuryNominal(db: D1Database): Promise<void> {
+  await runWithStatus(db, 'us_treasury_nominal', async (startedAt) => {
+    const { startDate, urls } = await treasuryYearUrls(db);
+    const responses = await Promise.all(urls.map((year) => fetchText(treasuryCsvUrl(year, 'daily_treasury_yield_curve'), 'text/csv')));
+    const bySeries: Record<'twoYear' | 'tenYear', Map<string, Awaited<ReturnType<typeof parseTreasuryNominalCurve>>['twoYear'][number]>> = { twoYear: new Map(), tenYear: new Map() };
+    for (const response of responses) {
+      const rows = await parseTreasuryNominalCurve(response.text, response.sourceTimestamp);
+      for (const key of ['twoYear', 'tenYear'] as const) for (const row of rows[key]) if (row.date >= startDate) bySeries[key].set(row.date, row);
+    }
+    const twoYear = [...bySeries.twoYear.values()].sort((a,b)=>a.date.localeCompare(b.date));
+    const tenYear = [...bySeries.tenYear.values()].sort((a,b)=>a.date.localeCompare(b.date));
+    const written = (await persistMacroRows(db, 'ust_2y_nominal', twoYear, startedAt)) + (await persistMacroRows(db, 'ust_10y_nominal', tenYear, startedAt));
+    return { read: twoYear.length + tenYear.length, written, details: { sourceUrls: urls.map((year) => treasuryCsvUrl(year, 'daily_treasury_yield_curve')), rowsRead: twoYear.length + tenYear.length, latestDate: tenYear.at(-1)?.date ?? null } };
+  });
+}
+
+async function ingestUsTreasuryReal(db: D1Database): Promise<void> {
+  await runWithStatus(db, 'us_treasury_real', async (startedAt) => {
+    const { startDate, urls } = await treasuryYearUrls(db);
+    const responses = await Promise.all(urls.map((year) => fetchText(treasuryCsvUrl(year, 'daily_treasury_real_yield_curve'), 'text/csv')));
+    const observations = new Map<string, Awaited<ReturnType<typeof parseTreasuryRealCurve>>[number]>();
+    for (const response of responses) for (const row of await parseTreasuryRealCurve(response.text, response.sourceTimestamp)) if (row.date >= startDate) observations.set(row.date, row);
+    const rows = [...observations.values()].sort((a,b)=>a.date.localeCompare(b.date));
+    const written = await persistMacroRows(db, 'ust_10y_real', rows, startedAt);
+    return { read: rows.length, written, details: { sourceUrls: urls.map((year) => treasuryCsvUrl(year, 'daily_treasury_real_yield_curve')), rowsRead: rows.length, latestDate: rows.at(-1)?.date ?? null } };
   });
 }
 
@@ -200,10 +223,8 @@ async function ingestAll(db: D1Database): Promise<void> {
   await ingestCurve(db, 'real', BOI_REAL_CURVE_URL);
   await ingestInflationExpectations(db);
   await ingestUsdIls(db);
-  await ingestFredSeries(db, 'DGS2', 'us_2y_nominal');
-  await ingestFredSeries(db, 'DGS10', 'us_10y_nominal');
-  await ingestFredSeries(db, 'DFII10', 'us_10y_real');
-  await ingestFredSeries(db, 'T10YIE', 'us_10y_breakeven');
+  await ingestUsTreasuryNominal(db);
+  await ingestUsTreasuryReal(db);
   await ingestCreditSpreads(db);
 }
 
@@ -226,6 +247,7 @@ async function manualIngestionSources(db: D1Database, startedAt: string) {
     try { details = JSON.parse(run.details_json ?? '{}') as Record<string, unknown>; } catch { /* Invalid diagnostics are omitted. */ }
     const key = run.job_key === 'boi_credit_spreads' ? 'boiCreditSpreads' : run.job_key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
     const source: Record<string, unknown> = { ok: run.status === 'success', rowsRead: run.records_read ?? 0, rowsWritten: run.records_written ?? 0 };
+    if (run.job_key.startsWith('us_treasury_')) source.latestDate = typeof details.latestDate === 'string' ? details.latestDate : null;
     if (run.job_key === 'boi_credit_spreads') {
       source.rowsFetched = typeof details.rowsFetched === 'number' ? details.rowsFetched : null;
       source.spreadRows = run.records_read ?? 0;
@@ -255,6 +277,7 @@ async function handleManualIngestion(request: Request, env: Env, runPipeline: (d
     const finishedAt = nowIso();
     const sources = await manualIngestionSources(env.DB, startedAt);
     const ok = Object.values(sources).every((source) => source.ok === true);
+    sources.fredCrossCheck = { ok: null, status: 'not_run', reason: 'optional_cross_check_not_required_for_production_data' };
     console.log('Manual ingestion completed', 'production_pipeline', Object.keys(sources).length);
     return json({ ok, startedAt, finishedAt, sources });
   } catch (error) {
@@ -570,7 +593,7 @@ async function buildSignals(db: D1Database, definitions: DbSignalDefinition[], s
   const differentialChangeBps = currentDifferentialBps !== null && previousDifferentialBps !== null ? currentDifferentialBps - previousDifferentialBps : null;
   const usdUsable = sourceMap.get('boi_usdils')?.status === 'ok';
   const realUsable = sourceMap.get('boi_real_curve')?.status === 'ok';
-  const usRealUsable = sourceMap.get('fred_dfii10')?.status === 'ok';
+  const usRealUsable = sourceMap.get('us_treasury_real')?.status === 'ok';
   const risk = riskConditionsProxy({
     usdIls20dPercent: usdUsable ? usdLookback : null,
     israelRealYieldChangeBps: realUsable ? realChangeBps : null,
@@ -610,7 +633,7 @@ async function buildSignals(db: D1Database, definitions: DbSignalDefinition[], s
   pushContextSignal('usd_ils', usdStatus, { current: currentUsdValue, change1dPct: percentChange(currentUsdValue ?? NaN, usdRows.at(-2)?.value ?? NaN), change5dPct: lookbackPercentChange(usdRows.map((row) => ({ date: row.observation_date, value: row.value })), 5), change20dPct: usdLookback, change60dPct: lookbackPercentChange(usdRows.map((row) => ({ date: row.observation_date, value: row.value })), 60), fixingIsIndicative: 1 }, latestUsd?.observation_date ?? null);
   const latestUsNominal = usNominalRows.at(-1) ?? null;
   const addUsContext = (key: 'us_10y_nominal' | 'us_10y_real', rows: DbObservation[], latest: DbObservation | null) => {
-    const sourceKey = key === 'us_10y_nominal' ? 'fred_dgs10' : 'fred_dfii10';
+    const sourceKey = key === 'us_10y_nominal' ? 'us_treasury_nominal' : 'us_treasury_real';
     const status: SignalStatus = sourceMap.get(sourceKey)?.status === 'ok' ? 'yellow' : 'unknown';
     const changes = [1, 5, 20, 60].map((sessions) => [sessions, lookbackChange(rows.map((row) => ({ date: row.observation_date, value: row.value })), sessions)] as const);
     pushContextSignal(key, status, { current: latest?.value ?? null, change1dBps: changes[0][1] === null ? null : changes[0][1] * 100, change5dBps: changes[1][1] === null ? null : changes[1][1] * 100, change20dBps: changes[2][1] === null ? null : changes[2][1] * 100, change60dBps: changes[3][1] === null ? null : changes[3][1] * 100 }, latest?.observation_date ?? null);
@@ -642,10 +665,8 @@ async function getSourceStatuses(db: D1Database): Promise<SourceStatus[]> {
     { key: 'boi_real_curve', name: 'עקום ריאלי — בנק ישראל', url: BOI_CURVE_PAGE, seriesId: 'real_yield_10y', curveType: 'real' },
     { key: 'boi_inflation_expectations', name: 'ציפיות אינפלציה — בנק ישראל', url: BOI_EXPECTATIONS_PAGE, seriesId: 'il_bei_1y' },
     { key: 'boi_usdils', name: 'שער דולר / שקל יציג — בנק ישראל', url: BOI_USD_RATE_URL, seriesId: 'usd_ils' },
-    { key: 'fred_dgs2', name: 'תשואה נומינלית ל־2 שנים — FRED DGS2', url: 'https://fred.stlouisfed.org/series/DGS2', seriesId: 'us_2y_nominal' },
-    { key: 'fred_dgs10', name: 'תשואה נומינלית ל־10 שנים — FRED DGS10', url: 'https://fred.stlouisfed.org/series/DGS10', seriesId: 'us_10y_nominal' },
-    { key: 'fred_dfii10', name: 'תשואה ריאלית ל־10 שנים — FRED DFII10', url: 'https://fred.stlouisfed.org/series/DFII10', seriesId: 'us_10y_real' },
-    { key: 'fred_t10yie', name: 'ציפיות אינפלציה ל־10 שנים — FRED T10YIE', url: 'https://fred.stlouisfed.org/series/T10YIE', seriesId: 'us_10y_breakeven' },
+    { key: 'us_treasury_nominal', name: 'U.S. Treasury', url: US_TREASURY_PAGE, seriesId: 'ust_10y_nominal' },
+    { key: 'us_treasury_real', name: 'U.S. Treasury', url: US_TREASURY_PAGE, seriesId: 'ust_10y_real' },
   ];
   const output: SourceStatus[] = [];
   for (const source of statuses) {
@@ -703,7 +724,7 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
   ]);
   const cpi = cpiStats(cpiRows);
   const expIds = ['il_bei_1y', 'il_bei_5y', 'il_bei_5y5y', 'il_forecast_cpi_12m'];
-  const [expectationRows, usdRows, us2yRows, usNominalRows, usRealRows, usBreakevenRows] = await Promise.all([Promise.all(expIds.map((id) => getHistory(db, id, 240))), getHistory(db, 'usd_ils', 500), getHistory(db, 'us_2y_nominal', 500), getHistory(db, 'us_10y_nominal', 500), getHistory(db, 'us_10y_real', 500), getHistory(db, 'us_10y_breakeven', 500)]);
+  const [expectationRows, usdRows, us2yRows, usNominalRows, usRealRows] = await Promise.all([Promise.all(expIds.map((id) => getHistory(db, id, 240))), getHistory(db, 'usd_ils', 500), getHistory(db, 'ust_2y_nominal', 500), getHistory(db, 'ust_10y_nominal', 500), getHistory(db, 'ust_10y_real', 500)]);
   const expectations = Object.fromEntries(expIds.map((id, index) => [id, expectationRows[index]]));
   const currentSignals = await buildSignals(db, definitions, settings, cpiRows, realCurve, nominalCurve, expectations, usdRows, usNominalRows, usRealRows, sources);
   const regimeResult = weightedRegime(
@@ -739,14 +760,17 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
   const usdPoints = usdRows.map((r) => ({ date: r.observation_date, value: r.value }));
   const usd = market('usd_ils', usdRows, 'ILS', 'boi_usdils', { '1dPct': lookbackPercentChange(usdPoints,1), '5dPct': lookbackPercentChange(usdPoints,5), '20dPct': lookbackPercentChange(usdPoints,20), '60dPct': lookbackPercentChange(usdPoints,60) });
   const toYieldPoints = (rows: DbObservation[]) => rows.map((row) => ({ date: row.observation_date, value: row.value }));
-  const us2y = market('us_2y_nominal', us2yRows, '%', 'fred_dgs2', usTreasuryChangesBps(toYieldPoints(us2yRows)));
-  const usNom = market('us_10y_nominal', usNominalRows, '%', 'fred_dgs10', usTreasuryChangesBps(toYieldPoints(usNominalRows)));
-  const usReal = market('us_10y_real', usRealRows, '%', 'fred_dfii10', usTreasuryChangesBps(toYieldPoints(usRealRows)));
-  const usBreakeven = market('us_10y_breakeven', usBreakevenRows, '%', 'fred_t10yie', usTreasuryChangesBps(toYieldPoints(usBreakevenRows)));
+  const us2y = { ...market('us_2y_nominal', us2yRows, '%', 'us_treasury_nominal', usTreasuryChangesBps(toYieldPoints(us2yRows))), derived: false, provenance: 'U.S. Treasury Daily Treasury Par Yield Curve Rates' };
+  const usNom = { ...market('us_10y_nominal', usNominalRows, '%', 'us_treasury_nominal', usTreasuryChangesBps(toYieldPoints(usNominalRows))), derived: false, provenance: 'U.S. Treasury Daily Treasury Par Yield Curve Rates' };
+  const usReal = { ...market('us_10y_real', usRealRows, '%', 'us_treasury_real', usTreasuryChangesBps(toYieldPoints(usRealRows))), derived: false, provenance: 'U.S. Treasury Daily Treasury Par Real Yield Curve Rates' };
+  const breakevenRows = deriveUs10yBreakeven(toYieldPoints(usNominalRows), toYieldPoints(usRealRows));
+  const breakevenValues: DbObservation[] = breakevenRows.map((row) => ({ observation_date: row.date, value: row.value, ingested_at: usNominalRows.find((nominal) => nominal.observation_date === row.date)?.ingested_at ?? nowIso(), source_timestamp: null, revision_number: 1 }));
+  const derivedBreakevenStatus: SourceStatus['status'] = usNom.status === 'error' || usReal.status === 'error' ? 'error' : usNom.status === 'stale' || usReal.status === 'stale' ? 'stale' : usNom.status === 'ok' && usReal.status === 'ok' ? 'ok' : 'pending';
+  const usBreakeven = { ...market('us_10y_breakeven', breakevenValues, '%', 'us_treasury_nominal', usTreasuryChangesBps(breakevenRows)), status: derivedBreakevenStatus, derived: true, provenance: 'תשואה נומינלית ל־10 שנים פחות תשואה ריאלית ל־10 שנים, בתאריכים חופפים' };
   const curveRows = deriveUs2s10s(toYieldPoints(usNominalRows), toYieldPoints(us2yRows));
   const curveValues: DbObservation[] = curveRows.map((row) => ({ observation_date: row.date, value: row.value, ingested_at: usNominalRows.find((nominal) => nominal.observation_date === row.date)?.ingested_at ?? nowIso(), source_timestamp: null, revision_number: 1 }));
   const curveStatus: SourceStatus['status'] = us2y.status === 'error' || usNom.status === 'error' ? 'error' : us2y.status === 'stale' || usNom.status === 'stale' ? 'stale' : us2y.status === 'ok' && usNom.status === 'ok' ? 'ok' : 'pending';
-  const us2s10s = { ...market('us_2s10s', curveValues, 'bp', 'fred_dgs10', usTreasuryChangesBps(curveRows, 1)), status: curveStatus, source: 'FRED DGS10 ו־DGS2', sourceUrl: 'https://fred.stlouisfed.org/series/DGS2' };
+  const us2s10s = { ...market('us_2s10s', curveValues, 'bp', 'us_treasury_nominal', usTreasuryChangesBps(curveRows, 1)), status: curveStatus, source: 'U.S. Treasury', sourceUrl: US_TREASURY_PAGE, derived: true, provenance: 'תשואה ל־10 שנים פחות תשואה ל־2 שנים, בתאריכים חופפים' };
   const differentialSignal = signalByKey.get('il_us_real_yield_differential');
   const diffCurrent = typeof differentialSignal?.value.currentBps === 'number' ? differentialSignal.value.currentBps : null;
   const differential: MarketSeries = { key:'il_us_real_yield_differential', value:diffCurrent, unit:'bp', observationDate:differentialSignal?.observationDate ?? null, sourceTimestamp:null, ingestedAt:nowIso(), revisionNumber:null, source:'בנק ישראל + FRED', sourceUrl:BOI_REAL_CURVE_URL, status:diffCurrent === null ? 'pending':'ok', changes:{ changeBps:typeof differentialSignal?.value.changeBps==='number'?differentialSignal.value.changeBps:null }, history:[] };

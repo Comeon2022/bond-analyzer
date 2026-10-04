@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseFredSeries, parsePolicyRate } from './sources';
+import { parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseFredSeries, parsePolicyRate, parseTreasuryNominalCurve, parseTreasuryRealCurve } from './sources';
 
 describe('source payload normalization', () => {
   it('validates Bank of Israel policy rate responses without substituting defaults', () => {
@@ -39,6 +39,14 @@ describe('source payload normalization', () => {
     const breakeven = await parseFredSeries('observation_date,T10YIE\n2026-09-29,2.37\n2026-09-30,.\n2026-10-01,2.40', 'T10YIE');
     expect(twoYear.map((row) => [row.date, row.value])).toEqual([['2026-09-29', 4.89], ['2026-10-01', 4.78]]);
     expect(breakeven.map((row) => [row.date, row.value])).toEqual([['2026-09-29', 2.37], ['2026-10-01', 2.4]]);
+  });
+
+  it('parses official Treasury nominal and real CSVs, skips N/A and invalid dates, and preserves gaps', async () => {
+    const nominal = await parseTreasuryNominalCurve('Date,"2 Yr","10 Yr"\n10/02/2026,4.83,5.28\n10/01/2026,4.78,5.24\n09/30/2026,N/A,5.29\n09/29/2026,4.70,5.20\n02/30/2026,4.7,5.2');
+    const real = await parseTreasuryRealCurve('Date,"5 YR","10 YR"\n10/02/2026,2.69,2.92\n10/01/2026,2.65,2.88\n09/30/2026,2.73,N/A');
+    expect(nominal.twoYear.map((row) => [row.date, row.value])).toEqual([['2026-09-29', 4.7], ['2026-10-01', 4.78], ['2026-10-02', 4.83]]);
+    expect(nominal.tenYear.map((row) => row.date)).toEqual(['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02']);
+    expect(real.map((row) => [row.date, row.value])).toEqual([['2026-10-01', 2.88], ['2026-10-02', 2.92]]);
   });
 
   it('maps BOI expectations tenors and rejects a workbook without the source table', async () => {

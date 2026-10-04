@@ -20,6 +20,14 @@ export function deriveUs2s10s(nominal10y: DailyYieldPoint[], nominal2y: DailyYie
   });
 }
 
+export function deriveUs10yBreakeven(nominal10y: DailyYieldPoint[], real10y: DailyYieldPoint[]): DailyYieldPoint[] {
+  const realByDate = new Map(real10y.map((point) => [point.date, point.value]));
+  return nominal10y.flatMap((point) => {
+    const real = realByDate.get(point.date);
+    return real === undefined ? [] : [{ date: point.date, value: Math.round((point.value - real) * 10000) / 10000 }];
+  });
+}
+
 export function classifyUs2s10s(spreadBps: number | null): 'normal' | 'flat' | 'inverted' | 'insufficient' {
   if (spreadBps === null || !Number.isFinite(spreadBps)) return 'insufficient';
   if (spreadBps < 0) return 'inverted';

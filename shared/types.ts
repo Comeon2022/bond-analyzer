@@ -71,6 +71,8 @@ export interface MarketSeries {
   history: Observation[];
   ingestedAt?: string | null;
   revisionNumber?: number | null;
+  derived?: boolean;
+  provenance?: string;
 }
 
 export interface RiskComponent {

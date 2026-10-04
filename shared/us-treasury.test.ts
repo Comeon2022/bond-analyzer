@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyUs2s10s, deriveUs2s10s, usTreasuryChangesBps } from './us-treasury';
+import { classifyUs2s10s, deriveUs10yBreakeven, deriveUs2s10s, usTreasuryChangesBps } from './us-treasury';
 
 describe('U.S. Treasury yield transformations', () => {
   it('derives 2s10s only for matching observation dates', () => {
@@ -8,6 +8,10 @@ describe('U.S. Treasury yield transformations', () => {
       [{ date: '2026-10-01', value: 4.0 }],
     );
     expect(spread).toEqual([{ date: '2026-10-01', value: 20 }]);
+  });
+
+  it('derives 10Y breakeven only on aligned nominal/real Treasury dates', () => {
+    expect(deriveUs10yBreakeven([{ date: '2026-10-01', value: 5.24 }, { date: '2026-10-02', value: 5.28 }], [{ date: '2026-10-02', value: 2.92 }])).toEqual([{ date: '2026-10-02', value: 2.36 }]);
   });
 
   it('classifies normal, flat, inverted, and unavailable curve observations', () => {

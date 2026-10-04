@@ -378,3 +378,38 @@ At the end of the original Phase 1C implementation, `git rev-parse --show-toplev
 - `npx wrangler deploy --dry-run`: passed; no Worker/API changes require deployment.
 - Implementation commit `2bff3a8ac6248bb8a4878dda9700df83345f9d56` (`Rebuild hero as compact executive brief`) was pushed to `origin/main`. The Git-triggered Pages deployment reported source `2bff3a8` but initially served the prior bundle, so the verified local `dist/` build was published directly to Pages project `bond-analyzer` on `main`. Deployment `bbfd7086-abec-4313-9d25-6cc4c48b6d56` is available at `https://bbfd7086.bond-analyzer-av2.pages.dev`. The production alias `https://bond-analyzer-av2.pages.dev/` returned HTTP 200 and served `index-DvxkuKqC.js` and `index-lBRUhuHh.css`; UTF-8 content checks confirmed the executive brief, compact support label, inflation line, and two-column/status CSS.
 - Repository verified as `bond-analyzer`, remote `https://github.com/Comeon2022/bond-analyzer.git`, branch `main`; RAGOps was not accessed or modified. User-provided specs/CSV files remain unstaged.
+
+
+## Phase 1O - Official U.S. Treasury feed cutover - 2026-10-04
+
+### Implemented
+
+- Replaced the production Worker U.S. Treasury fetch path from FRED with official U.S. Department of the Treasury annual CSV feeds. Nominal URL pattern: `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve`. Real URL uses `type=daily_treasury_real_yield_curve`. Ingestion fetches each calendar year in the configured minimum 400-day / default 450-day window, filters to the exact start date, merges by date, and preserves gaps.
+- Added additive migration `0006_us_treasury_official_feeds.sql` defining separate `ust_2y_nominal`, `ust_10y_nominal`, and `ust_10y_real` identities under official `us_treasury` source. FRED series and observations remain unchanged.
+- Added nominal and real Treasury CSV parsers. They normalize headers and Treasury `MM/DD/YYYY` dates, validate calendar dates and numeric yields, skip blank/N/A/ND/dot/malformed observations, sort ascending, and never fill missing observations.
+- Preserved `/api/overview` keys `us2yNominal`, `us10yNominal`, `us10yReal`, `us10yBreakeven`, and `us2s10s`. Source yields carry Treasury source, actual observation date, and `derived: false`; calculated metrics carry `derived: true` and formula provenance. Breakeven is 10Y nominal minus 10Y real; 2s10s is 10Y nominal minus 2Y nominal. Both require date alignment. Breakeven freshness depends on both sources.
+- Replaced FRED-only UI source labels with the official U.S. Treasury source; displayed formulas for calculated values. Existing Phase 1N metrics, changes, charts, trends, and Israel context remain intact.
+- FRED parser/history remain available, but production Worker ingestion no longer calls FRED. Manual-ingestion output marks `fredCrossCheck` as `not_run`; its status cannot affect panel availability.
+- Added parser tests for nominal 2Y/10Y, real 10Y, N/A and invalid dates, gaps, and aligned-date breakeven calculation.
+
+### Verification and rollout
+
+- Verified official Treasury 2026 nominal and real CSVs return HTTP 200 and observations through `2026-10-02`: 2Y nominal 4.83%, 10Y nominal 5.28%, and 10Y real 2.92%. Verified 2025 annual files return HTTP 200 with year history for the 450-day fetch window.
+- `npm test`: passed, 86 tests / 18 files. `npm run typecheck`: passed. `npm run build`: passed. `npx wrangler deploy --dry-run`: passed.
+- Applied remote D1 migration `0006_us_treasury_official_feeds.sql` successfully.
+- Deployed Worker `israel-macro-rates-dashboard` at `https://israel-macro-rates-dashboard.karu-lior.workers.dev`; version `756c93ae-98a7-49ee-aff7-ca3d893a3a1c`. `/api/health`: `ok: true`, database reachable. `/api/overview` returns the five expected fields with source and derived provenance.
+- Published frontend to Pages project `bond-analyzer`: `https://652d850e.bond-analyzer-av2.pages.dev`. Both that deployment and `https://bond-analyzer-av2.pages.dev/` returned HTTP 200. The frontend bundle contains the Treasury source label and production Worker API origin.
+- **Authenticated live ingestion and value verification are pending.** `ADMIN_INGEST_TOKEN` exists as a Cloudflare secret but is write-only and unavailable in this workspace. No secret was read, exposed, or changed. Immediately after deployment, all five overview values are correctly pending/null because no Treasury rows have been written. Do not claim live D1 verification yet. The manual response reports `usTreasuryNominal`, `usTreasuryReal`, `fredCrossCheck`, counts, and latest dates. Check the five populated values and chart/lookback dates after ingestion.
+- Secure manual ingestion command (enter the token only at the hidden prompt; share only JSON output, never the token):
+
+  ```powershell
+  $env:ADMIN_INGEST_TOKEN = Read-Host 'Enter the configured admin ingestion token'
+  try {
+    Invoke-RestMethod -Method Post -Uri 'https://israel-macro-rates-dashboard.karu-lior.workers.dev/api/admin/ingest' -Headers @{ Authorization = "Bearer $env:ADMIN_INGEST_TOKEN" } | ConvertTo-Json -Depth 6
+  } finally {
+    Remove-Item Env:ADMIN_INGEST_TOKEN
+  }
+  ```
+
+- Repository verified before rollout: `bond-analyzer`, branch `main`, origin `https://github.com/Comeon2022/bond-analyzer.git`. RAGOps was not accessed. User-provided specs/CSV fixtures remain unstaged.
+- Implementation commit SHA: pending.

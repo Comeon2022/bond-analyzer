@@ -136,6 +136,57 @@ export async function parseBoiExchangeHistory(csv: string, sourceTimestamp: stri
 
 export type FredSeriesId = 'DGS2' | 'DGS10' | 'DFII10' | 'T10YIE';
 
+function treasuryDate(value: string): string | null {
+  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, monthText, dayText, yearText] = match;
+  const month = Number(monthText), day = Number(dayText), year = Number(yearText);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return `${yearText}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+export async function parseTreasuryNominalCurve(csv: string, sourceTimestamp: string | null = null): Promise<{ twoYear: SourceValue[]; tenYear: SourceValue[] }> {
+  const rows = rowsFromCsv(csv);
+  const headers = (rows[0] ?? []).map((header) => header.trim().toLowerCase().replace(/\s+/g, ' '));
+  const dateIndex = headers.indexOf('date');
+  const twoYearIndex = headers.indexOf('2 yr');
+  const tenYearIndex = headers.indexOf('10 yr');
+  if (dateIndex < 0 || twoYearIndex < 0 || tenYearIndex < 0) throw new Error('Treasury nominal CSV has an unrecognized Date/2 Yr/10 Yr header');
+  const output: Record<'twoYear' | 'tenYear', SourceValue[]> = { twoYear: [], tenYear: [] };
+  for (const row of rows.slice(1)) {
+    const date = treasuryDate(row[dateIndex] ?? '');
+    if (!date) continue;
+    for (const [key, index] of [['twoYear', twoYearIndex], ['tenYear', tenYearIndex]] as const) {
+      const raw = row[index]?.trim();
+      if (!raw || /^(?:n\/?a|nd|\.|-+)$/i.test(raw)) continue;
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < -10 || value > 40) continue;
+      output[key].push({ date, value, sourceTimestamp, hash: await sha256Hex(new TextEncoder().encode(JSON.stringify(row))) });
+    }
+  }
+  if (!output.twoYear.length || !output.tenYear.length) throw new Error('Treasury nominal CSV contains no valid 2 Yr and 10 Yr observations');
+  for (const rowsForTenor of Object.values(output)) rowsForTenor.sort((a, b) => a.date.localeCompare(b.date));
+  return output;
+}
+
+export async function parseTreasuryRealCurve(csv: string, sourceTimestamp: string | null = null): Promise<SourceValue[]> {
+  const rows = rowsFromCsv(csv);
+  const headers = (rows[0] ?? []).map((header) => header.trim().toLowerCase().replace(/\s+/g, ' '));
+  const dateIndex = headers.indexOf('date'), valueIndex = headers.indexOf('10 yr');
+  if (dateIndex < 0 || valueIndex < 0) throw new Error('Treasury real CSV has an unrecognized Date/10 Yr header');
+  const output: SourceValue[] = [];
+  for (const row of rows.slice(1)) {
+    const date = treasuryDate(row[dateIndex] ?? ''), raw = row[valueIndex]?.trim();
+    if (!date || !raw || /^(?:n\/?a|nd|\.|-+)$/i.test(raw)) continue;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < -10 || value > 40) continue;
+    output.push({ date, value, sourceTimestamp, hash: await sha256Hex(new TextEncoder().encode(JSON.stringify(row))) });
+  }
+  if (!output.length) throw new Error('Treasury real CSV contains no valid 10 Yr observations');
+  return output.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export async function parseFredSeries(csv: string, seriesId: FredSeriesId, sourceTimestamp: string | null = null): Promise<SourceValue[]> {
   const rows = rowsFromCsv(csv);
   const headers = rows[0] ?? [];

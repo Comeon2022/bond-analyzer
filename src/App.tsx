@@ -155,7 +155,7 @@ function UsTreasuryMetric({ series, title, concept, trend }: { series: OverviewR
     <div className="us-treasury-changes">{[
       ['1dBp', 'יום'], ['5dBp', '5 ימים'], ['20dBp', '20 ימים'], ['60dBp', '60 ימים'],
     ].map(([key, label]) => <span key={key}>{label}: <b>{usBpsLabel(series.changes[key])}</b></span>)}</div>
-    <a href={series.sourceUrl} target="_blank" rel="noreferrer">מקור FRED · {series.source}</a>
+    {series.derived ? <small>מחושב מנתוני U.S. Treasury: {series.provenance}</small> : <a href={series.sourceUrl} target="_blank" rel="noreferrer">מקור: U.S. Treasury</a>}
   </article>;
 }
 
@@ -177,12 +177,12 @@ export function UsTreasuryPanel({ markets }: { markets: UsTreasuryMarkets }) {
   const spread = curveValue === null ? 'אין נתון זמין' : `${curveValue > 0 ? '+' : ''}${numberLabel(curveValue, 1)} נ״ב`;
 
   return <section className="panel us-treasury-panel" aria-labelledby="us-treasury-title">
-    <div className="panel-title"><div><span className="eyebrow">נתוני שוק רשמיים · FRED</span><h2 id="us-treasury-title">אג״ח ממשלת ארה״ב</h2><p>תשואות, אינפלציה צפויה ועקום הריבית בארה״ב</p></div></div>
+    <div className="panel-title"><div><span className="eyebrow">נתוני שוק רשמיים · U.S. Treasury</span><h2 id="us-treasury-title">אג״ח ממשלת ארה״ב</h2><p>תשואות, אינפלציה צפויה ועקום הריבית בארה״ב</p></div></div>
     <div className="us-treasury-grid">
       <UsTreasuryMetric series={markets.us10yNominal} title="תשואה ל־10 שנים" concept="usNominal10y" trend={context.nominal10yTrend} />
       <UsTreasuryMetric series={markets.us10yReal} title="תשואה ריאלית ל־10 שנים" concept="usReal10y" trend={context.real10yTrend} />
       <UsTreasuryMetric series={markets.us10yBreakeven} title="ציפיות אינפלציה ל־10 שנים" concept="usBreakeven10y" />
-      <article className="us-treasury-card us-curve-card"><div className="us-treasury-card-title"><b>פער 2–10 שנים</b><ConceptExplainer concept="us2s10s" /></div><strong>{spread}</strong><span className={`us-treasury-trend ${curveShape}`}>{curveLabel}</span><small>{dateLabel(markets.us2s10s.observationDate)} · {marketStatusLabel(markets.us2s10s.status)}</small><p>פער בין תשואת 10 שנים לתשואת 2 שנים.</p><small>שינויים: יום {usBpsLabel(markets.us2s10s.changes['1dBp'])} · 5 ימים {usBpsLabel(markets.us2s10s.changes['5dBp'])} · 20 ימים {usBpsLabel(markets.us2s10s.changes['20dBp'])} · 60 ימים {usBpsLabel(markets.us2s10s.changes['60dBp'])}</small></article>
+      <article className="us-treasury-card us-curve-card"><div className="us-treasury-card-title"><b>פער 2–10 שנים</b><ConceptExplainer concept="us2s10s" /></div><strong>{spread}</strong><span className={`us-treasury-trend ${curveShape}`}>{curveLabel}</span><small>{dateLabel(markets.us2s10s.observationDate)} · {marketStatusLabel(markets.us2s10s.status)}</small><p>פער בין תשואת 10 שנים לתשואת 2 שנים.</p><small>מקור: U.S. Treasury · מחושב: תשואה ל־10 שנים פחות תשואה ל־2 שנים, בתאריכים חופפים.</small><small>שינויים: יום {usBpsLabel(markets.us2s10s.changes['1dBp'])} · 5 ימים {usBpsLabel(markets.us2s10s.changes['5dBp'])} · 20 ימים {usBpsLabel(markets.us2s10s.changes['20dBp'])} · 60 ימים {usBpsLabel(markets.us2s10s.changes['60dBp'])}</small></article>
     </div>
     <div className="us-curve-snapshot" aria-label="עקום 2–10 שנים"><b>עקום 2–10 שנים</b><span>2Y: {markets.us2yNominal.value === null ? 'אין נתון זמין' : `${numberLabel(markets.us2yNominal.value, 2)}%`} · {dateLabel(markets.us2yNominal.observationDate)} · {marketStatusLabel(markets.us2yNominal.status)}</span><span>10Y: {markets.us10yNominal.value === null ? 'אין נתון זמין' : `${numberLabel(markets.us10yNominal.value, 2)}%`}</span><span>2s10s: {spread} · {curveLabel}</span></div>
     <div className={`us-treasury-conclusion ${context.overallLabel === 'תומך באג״ח' ? 'supportive' : context.overallLabel === 'לוחץ על אג״ח' ? 'pressuring' : ''}`}><div><b>מה זה אומר כרגע?</b><strong>{context.overallLabel}</strong></div><p>{context.explanation}</p></div>
