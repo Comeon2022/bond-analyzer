@@ -1,10 +1,11 @@
 import { inflationSignal, percentChange, weightedRegime } from '../shared/calculations';
 import type { MacroCard, MarketSeries, Observation, OverviewResponse, Signal, SignalStatus, SourceStatus, YieldPoint } from '../shared/types';
 import { buildChangeSummary, lookbackChange, lookbackPercentChange, riskConditionsProxy } from '../shared/phase1b';
+import { deriveUs2s10s, usTreasuryChangesBps } from '../shared/us-treasury';
 import type { BondMarketRecord, BondFilters, LinkageType } from '../shared/bonds';
 import { quoteAgeBusinessDays, applyBondFilters, matchGovernmentBenchmark, creditSpreadBp, spreadPerDuration } from '../shared/bonds';
 import { bondSourceStatus } from './bond-source';
-import { fetchJson, fetchText, fetchWorkbook, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseFredSeries, parsePolicyRate } from './sources';
+import { fetchJson, fetchText, fetchWorkbook, parseBoiCurve, parseBoiExchangeHistory, parseBoiExchangeRate, parseBoiInflationExpectations, parseCbsCpi, parseFredSeries, parsePolicyRate, type FredSeriesId } from './sources';
 import { BOI_SECDWH_CSV_URL, BOI_SECDWH_DSD_URL, BOI_SECDWH_FLOW_URL, BOI_SECDWH_PAGE_URL, creditChanges, creditChangeBullet, fetchBoiXml, isCreditSeriesStale, parseBoiCodelist, parseBoiCreditCsv, parseBoiDsdCodelistRefs, resolveOfficialLabel, type CreditMetadata } from './credit';
 
 export interface Env { DB: D1Database; ASSETS: Fetcher; TASE_DATAHUB_API_KEY?: string; TASE_DATAHUB_BASE_URL?: string; ALLOWED_ORIGINS?: string; ADMIN_INGEST_TOKEN?: string; }
@@ -154,15 +155,17 @@ async function ingestUsdIls(db: D1Database): Promise<void> {
   });
 }
 
-function fredWindowUrl(seriesId: 'DGS10' | 'DFII10'): string {
+async function fredWindowUrl(db: D1Database, seriesId: FredSeriesId): Promise<string> {
+  const settings = await getDashboardSettings(db);
+  const calendarDays = Math.max(400, Math.floor(setting(settings, 'us_yield_lookback_calendar_days', 450)));
   const start = new Date();
-  start.setUTCDate(start.getUTCDate() - 120);
+  start.setUTCDate(start.getUTCDate() - calendarDays);
   return `${FRED_CSV_URL}?id=${seriesId}&cosd=${start.toISOString().slice(0, 10)}&coed=${todayUtc()}`;
 }
 
-async function ingestFredSeries(db: D1Database, seriesId: 'DGS10' | 'DFII10', seriesKey: 'us_10y_nominal' | 'us_10y_real'): Promise<void> {
+async function ingestFredSeries(db: D1Database, seriesId: FredSeriesId, seriesKey: 'us_2y_nominal' | 'us_10y_nominal' | 'us_10y_real' | 'us_10y_breakeven'): Promise<void> {
   await runWithStatus(db, `fred_${seriesId.toLowerCase()}`, async (startedAt) => {
-    const sourceUrl = fredWindowUrl(seriesId);
+    const sourceUrl = await fredWindowUrl(db, seriesId);
     const response = await fetchText(sourceUrl);
     const rows = await parseFredSeries(response.text, seriesId, response.sourceTimestamp);
     const written = await persistMacroRows(db, seriesKey, rows, startedAt);
@@ -197,8 +200,10 @@ async function ingestAll(db: D1Database): Promise<void> {
   await ingestCurve(db, 'real', BOI_REAL_CURVE_URL);
   await ingestInflationExpectations(db);
   await ingestUsdIls(db);
+  await ingestFredSeries(db, 'DGS2', 'us_2y_nominal');
   await ingestFredSeries(db, 'DGS10', 'us_10y_nominal');
   await ingestFredSeries(db, 'DFII10', 'us_10y_real');
+  await ingestFredSeries(db, 'T10YIE', 'us_10y_breakeven');
   await ingestCreditSpreads(db);
 }
 
@@ -637,8 +642,10 @@ async function getSourceStatuses(db: D1Database): Promise<SourceStatus[]> {
     { key: 'boi_real_curve', name: 'עקום ריאלי — בנק ישראל', url: BOI_CURVE_PAGE, seriesId: 'real_yield_10y', curveType: 'real' },
     { key: 'boi_inflation_expectations', name: 'ציפיות אינפלציה — בנק ישראל', url: BOI_EXPECTATIONS_PAGE, seriesId: 'il_bei_1y' },
     { key: 'boi_usdils', name: 'שער דולר / שקל יציג — בנק ישראל', url: BOI_USD_RATE_URL, seriesId: 'usd_ils' },
+    { key: 'fred_dgs2', name: 'תשואה נומינלית ל־2 שנים — FRED DGS2', url: 'https://fred.stlouisfed.org/series/DGS2', seriesId: 'us_2y_nominal' },
     { key: 'fred_dgs10', name: 'תשואה נומינלית ל־10 שנים — FRED DGS10', url: 'https://fred.stlouisfed.org/series/DGS10', seriesId: 'us_10y_nominal' },
     { key: 'fred_dfii10', name: 'תשואה ריאלית ל־10 שנים — FRED DFII10', url: 'https://fred.stlouisfed.org/series/DFII10', seriesId: 'us_10y_real' },
+    { key: 'fred_t10yie', name: 'ציפיות אינפלציה ל־10 שנים — FRED T10YIE', url: 'https://fred.stlouisfed.org/series/T10YIE', seriesId: 'us_10y_breakeven' },
   ];
   const output: SourceStatus[] = [];
   for (const source of statuses) {
@@ -696,7 +703,7 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
   ]);
   const cpi = cpiStats(cpiRows);
   const expIds = ['il_bei_1y', 'il_bei_5y', 'il_bei_5y5y', 'il_forecast_cpi_12m'];
-  const [expectationRows, usdRows, usNominalRows, usRealRows] = await Promise.all([Promise.all(expIds.map((id) => getHistory(db, id, 240))), getHistory(db, 'usd_ils', 500), getHistory(db, 'us_10y_nominal', 500), getHistory(db, 'us_10y_real', 500)]);
+  const [expectationRows, usdRows, us2yRows, usNominalRows, usRealRows, usBreakevenRows] = await Promise.all([Promise.all(expIds.map((id) => getHistory(db, id, 240))), getHistory(db, 'usd_ils', 500), getHistory(db, 'us_2y_nominal', 500), getHistory(db, 'us_10y_nominal', 500), getHistory(db, 'us_10y_real', 500), getHistory(db, 'us_10y_breakeven', 500)]);
   const expectations = Object.fromEntries(expIds.map((id, index) => [id, expectationRows[index]]));
   const currentSignals = await buildSignals(db, definitions, settings, cpiRows, realCurve, nominalCurve, expectations, usdRows, usNominalRows, usRealRows, sources);
   const regimeResult = weightedRegime(
@@ -731,8 +738,15 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
   const market = (key: string, rows: DbObservation[], unit: string, sourceKey: string, changes: Record<string, number | null>): MarketSeries => { const src = sourceByKey.get(sourceKey); const last = rows.at(-1); return { key, value: last?.value ?? null, unit, observationDate: last?.observation_date ?? null, sourceTimestamp: last?.source_timestamp ?? null, source: src?.name ?? 'לא זמין', sourceUrl: src?.url ?? '#', status: src?.status ?? 'pending', changes, history: rows.map(toObservation), ingestedAt:last?.ingested_at ?? null, revisionNumber:last?.revision_number ?? null }; };
   const usdPoints = usdRows.map((r) => ({ date: r.observation_date, value: r.value }));
   const usd = market('usd_ils', usdRows, 'ILS', 'boi_usdils', { '1dPct': lookbackPercentChange(usdPoints,1), '5dPct': lookbackPercentChange(usdPoints,5), '20dPct': lookbackPercentChange(usdPoints,20), '60dPct': lookbackPercentChange(usdPoints,60) });
-  const usNom = market('us_10y_nominal', usNominalRows, '%', 'fred_dgs10', Object.fromEntries([1,5,20,60].map(n=>[`${n}dBp`, lookbackChange(usNominalRows.map(r=>({date:r.observation_date,value:r.value})),n) === null ? null : lookbackChange(usNominalRows.map(r=>({date:r.observation_date,value:r.value})),n)!*100])) as Record<string,number|null>);
-  const usReal = market('us_10y_real', usRealRows, '%', 'fred_dfii10', Object.fromEntries([1,5,20,60].map(n=>[`${n}dBp`, lookbackChange(usRealRows.map(r=>({date:r.observation_date,value:r.value})),n) === null ? null : lookbackChange(usRealRows.map(r=>({date:r.observation_date,value:r.value})),n)!*100])) as Record<string,number|null>);
+  const toYieldPoints = (rows: DbObservation[]) => rows.map((row) => ({ date: row.observation_date, value: row.value }));
+  const us2y = market('us_2y_nominal', us2yRows, '%', 'fred_dgs2', usTreasuryChangesBps(toYieldPoints(us2yRows)));
+  const usNom = market('us_10y_nominal', usNominalRows, '%', 'fred_dgs10', usTreasuryChangesBps(toYieldPoints(usNominalRows)));
+  const usReal = market('us_10y_real', usRealRows, '%', 'fred_dfii10', usTreasuryChangesBps(toYieldPoints(usRealRows)));
+  const usBreakeven = market('us_10y_breakeven', usBreakevenRows, '%', 'fred_t10yie', usTreasuryChangesBps(toYieldPoints(usBreakevenRows)));
+  const curveRows = deriveUs2s10s(toYieldPoints(usNominalRows), toYieldPoints(us2yRows));
+  const curveValues: DbObservation[] = curveRows.map((row) => ({ observation_date: row.date, value: row.value, ingested_at: usNominalRows.find((nominal) => nominal.observation_date === row.date)?.ingested_at ?? nowIso(), source_timestamp: null, revision_number: 1 }));
+  const curveStatus: SourceStatus['status'] = us2y.status === 'error' || usNom.status === 'error' ? 'error' : us2y.status === 'stale' || usNom.status === 'stale' ? 'stale' : us2y.status === 'ok' && usNom.status === 'ok' ? 'ok' : 'pending';
+  const us2s10s = { ...market('us_2s10s', curveValues, 'bp', 'fred_dgs10', usTreasuryChangesBps(curveRows, 1)), status: curveStatus, source: 'FRED DGS10 ו־DGS2', sourceUrl: 'https://fred.stlouisfed.org/series/DGS2' };
   const differentialSignal = signalByKey.get('il_us_real_yield_differential');
   const diffCurrent = typeof differentialSignal?.value.currentBps === 'number' ? differentialSignal.value.currentBps : null;
   const differential: MarketSeries = { key:'il_us_real_yield_differential', value:diffCurrent, unit:'bp', observationDate:differentialSignal?.observationDate ?? null, sourceTimestamp:null, ingestedAt:nowIso(), revisionNumber:null, source:'בנק ישראל + FRED', sourceUrl:BOI_REAL_CURVE_URL, status:diffCurrent === null ? 'pending':'ok', changes:{ changeBps:typeof differentialSignal?.value.changeBps==='number'?differentialSignal.value.changeBps:null }, history:[] };
@@ -745,7 +759,7 @@ async function getOverview(db: D1Database): Promise<OverviewResponse> {
   const bondSource=bondSourceStatus();
   const expChange=expectationsItems[0]?.changes.previousChange;
   const changes=buildChangeSummary({israelRealYieldChangeBps:realChange,usdIls20dPercent:typeof usd.changes['20dPct']==='number'?usd.changes['20dPct']!:null,inflationExpectationChange:typeof expChange==='number'?expChange:null,usNominal5dBps:typeof usNom.changes['5dBp']==='number'?usNom.changes['5dBp']!:null,bondSpreadChanges:bondUniverse.rows.map(row=>({issuerHe:row.issuerNameHe,seriesName:row.seriesName,changeBp:row.spreadChange5dBp,thresholdBp:setting(settings,'bond_spread_change_threshold_bp',5)}))});
-  return { generatedAt: nowIso(), regime, cards, signals: currentSignals, inflation: { ...cpi, targetLow: setting(settings, 'inflation_target_low', 1), targetHigh: setting(settings, 'inflation_target_high', 3), observations: cpiRows.map(toObservation) }, curves: { real: realCurve, nominal: nominalCurve }, sources, expectations:{items:expectationsItems,publicationDate:expectationsItems[0]?.sourceTimestamp ?? null}, markets:{usdIls:usd,us10yNominal:usNom,us10yReal:usReal,realYieldDifferential:differential,riskProxy}, changes, regimeHistory, bondScreener:{sourceStatus:bondSource.status,sourceUrl:bondSource.sourceUrl,blocker:bondSource.blocker,issuers:bondUniverse.issuers,rows:bondUniverse.rows} };
+  return { generatedAt: nowIso(), regime, cards, signals: currentSignals, inflation: { ...cpi, targetLow: setting(settings, 'inflation_target_low', 1), targetHigh: setting(settings, 'inflation_target_high', 3), observations: cpiRows.map(toObservation) }, curves: { real: realCurve, nominal: nominalCurve }, sources, expectations:{items:expectationsItems,publicationDate:expectationsItems[0]?.sourceTimestamp ?? null}, markets:{usdIls:usd,us2yNominal:us2y,us10yNominal:usNom,us10yReal:usReal,us10yBreakeven:usBreakeven,us2s10s,realYieldDifferential:differential,riskProxy}, changes, regimeHistory, bondScreener:{sourceStatus:bondSource.status,sourceUrl:bondSource.sourceUrl,blocker:bondSource.blocker,issuers:bondUniverse.issuers,rows:bondUniverse.rows} };
 }
 
 async function handleApi(request: Request, env: Env): Promise<Response> {

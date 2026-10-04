@@ -447,6 +447,55 @@ h1, h2, h3, p { margin-top: 0; }
   .regime-foot { flex-direction: column; gap: 2px; }
 }
 
+/* Phase 1N: official U.S. Treasury market context */
+.us-treasury-panel { margin-top: 14px; }
+.us-treasury-panel > .panel-title h2 { margin-bottom: 3px; }
+.us-treasury-panel > .panel-title p { margin: 0; color: #5b7181; font-size: 13px; }
+.us-treasury-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 13px 0 10px; }
+.us-treasury-card { display: flex; min-width: 0; flex-direction: column; gap: 6px; padding: 11px 12px; border: 1px solid #dfe7ec; border-radius: 6px; background: #fbfcfd; }
+.us-treasury-card-title { display: flex; align-items: center; justify-content: space-between; gap: 4px; color: #40596c; font-size: 12px; }
+.us-treasury-card > strong { color: #1f3d53; font-size: 25px; line-height: 1.2; }
+.us-treasury-card > small { color: #71818d; font-size: 10px; line-height: 1.4; }
+.us-treasury-card > a { color: #477895; font-size: 10px; text-decoration: none; }
+.us-treasury-trend { align-self: flex-start; padding: 3px 7px; border-radius: 10px; background: #edf1f3; color: #64727c; font-size: 10px; font-weight: 700; }
+.us-treasury-trend.rising { background: #f8e9e7; color: #98433c; }
+.us-treasury-trend.falling { background: #e7f2eb; color: #2e6d4c; }
+.us-treasury-trend.mixed, .us-treasury-trend.insufficient, .us-treasury-trend.flat { background: #f3efdf; color: #75612b; }
+.us-treasury-trend.normal { background: #e9f0f3; color: #4a697d; }
+.us-treasury-trend.inverted { background: #f7e9e7; color: #8a4b42; }
+.us-treasury-changes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-top: 3px; padding-top: 7px; border-top: 1px solid #e7edf1; color: #6b7a86; font-size: 10px; }
+.us-treasury-changes b { color: #344d60; font-weight: 650; white-space: nowrap; }
+.us-curve-card > p { margin: 0; color: #647584; font-size: 11px; line-height: 1.45; }
+.us-curve-snapshot { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 16px; padding: 9px 11px; border-right: 3px solid #739cb1; background: #f1f6f8; color: #526a7c; font-size: 11px; }
+.us-curve-snapshot > b { color: #344f63; }
+.us-treasury-conclusion { margin-top: 11px; padding: 10px 12px; border-right: 3px solid #879eaa; background: #f2f5f6; }
+.us-treasury-conclusion.supportive { border-color: #5d9975; background: #eff7f1; }
+.us-treasury-conclusion.pressuring { border-color: #bd6a61; background: #fbf1f0; }
+.us-treasury-conclusion > div { display: flex; align-items: center; gap: 9px; color: #425b6e; font-size: 13px; }
+.us-treasury-conclusion > div strong { color: #344d60; font-size: 12px; }
+.us-treasury-conclusion p { margin: 4px 0 0; color: #526678; font-size: 12px; line-height: 1.55; }
+.us-israel-link { margin: 10px 0 5px; padding: 9px 11px; border: 1px solid #e2e9ed; border-radius: 5px; }
+.us-israel-link > b { color: #3b586d; font-size: 12px; }
+.us-israel-link p { margin: 3px 0 0; color: #5b6f7e; font-size: 11px; line-height: 1.55; }
+.us-bps-note { color: #788792; font-size: 10px; }
+.us-chart-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-top: 13px; }
+.us-chart-toolbar > b { color: #40596c; font-size: 12px; }
+.us-chart-series { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.us-chart-series button, .us-chart-ranges button { padding: 4px 8px; border: 1px solid #d2dee5; border-radius: 4px; background: #fff; color: #566e7e; font-family: inherit; font-size: 10px; cursor: pointer; }
+.us-chart-series button[aria-pressed="true"], .us-chart-ranges button[aria-pressed="true"] { border-color: #327da4; background: #327da4; color: #fff; }
+.us-chart-series button:disabled { opacity: .45; cursor: not-allowed; }
+.us-chart-ranges { display: flex; justify-content: flex-end; gap: 4px; margin-top: 5px; }
+.us-treasury-chart { height: 150px; margin-top: 2px; }
+@media (max-width: 920px) {
+  .us-treasury-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .us-treasury-grid { grid-template-columns: minmax(0, 1fr); }
+  .us-chart-toolbar { flex-direction: column; }
+  .us-chart-series { justify-content: flex-start; }
+  .us-curve-snapshot { align-items: flex-start; flex-direction: column; gap: 5px; }
+}
+
 /* Phase 1K: one compact status strip followed by exactly two briefing columns. */
 .regime-panel { padding: 17px 22px 10px; }
 .executive-brief { display: grid; gap: 15px; }

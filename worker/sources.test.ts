@@ -34,6 +34,13 @@ describe('source payload normalization', () => {
     expect(rows.map(x=>x.date)).toEqual(['2026-09-25','2026-09-28']);
   });
 
+  it('parses DGS2 and T10YIE from official FRED CSV column names without filling missing days', async () => {
+    const twoYear = await parseFredSeries('observation_date,DGS2\n2026-09-29,4.89\n2026-09-30,.\n2026-10-01,4.78', 'DGS2');
+    const breakeven = await parseFredSeries('observation_date,T10YIE\n2026-09-29,2.37\n2026-09-30,.\n2026-10-01,2.40', 'T10YIE');
+    expect(twoYear.map((row) => [row.date, row.value])).toEqual([['2026-09-29', 4.89], ['2026-10-01', 4.78]]);
+    expect(breakeven.map((row) => [row.date, row.value])).toEqual([['2026-09-29', 2.37], ['2026-10-01', 2.4]]);
+  });
+
   it('maps BOI expectations tenors and rejects a workbook without the source table', async () => {
     const wb=XLSX.utils.book_new();
     const ws=XLSX.utils.aoa_to_sheet([['Date','Date','Expected inflation rate 1Y','','','','5 years','years 5-10','forecasters 12m'],[null,46200,2.1,null,null,null,2.4,2.6,2.2]]);

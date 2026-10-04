@@ -105,7 +105,7 @@ export interface OverviewResponse {
   curves: { real: YieldPoint[]; nominal: YieldPoint[] };
   sources: SourceStatus[];
   expectations: { items: MarketSeries[]; publicationDate: string | null };
-  markets: { usdIls: MarketSeries; us10yNominal: MarketSeries; us10yReal: MarketSeries; realYieldDifferential: MarketSeries; riskProxy: RiskProxy };
+  markets: { usdIls: MarketSeries; us2yNominal: MarketSeries; us10yNominal: MarketSeries; us10yReal: MarketSeries; us10yBreakeven: MarketSeries; us2s10s: MarketSeries; realYieldDifferential: MarketSeries; riskProxy: RiskProxy };
   changes: ChangeSummary;
   bondScreener: { sourceStatus: 'pending' | 'configured'; sourceUrl: string; blocker: string; issuers: Array<{issuerKey:string;issuerNameHe:string;issuerNameEn:string;issuerGroup:string}>; rows: BondMarketRecord[] };
   regimeHistory: Array<{ date: string; score: number | null; coveragePct: number; status: SignalStatus; green: number; yellow: number; red: number; topPositive: string | null; topNegative: string | null }>;

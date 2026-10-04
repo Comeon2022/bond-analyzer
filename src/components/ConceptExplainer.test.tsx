@@ -33,7 +33,7 @@ describe('Phase 1H accessible concept explanations', () => {
   });
 
   it('provides complete Hebrew explanations for every required macro and bond term', () => {
-    const terms = ['policyRate', 'inflation', 'cpiIndex', 'inflationExpectations', 'realYield', 'nominalYield', 'realYield10y', 'longYieldTrend', 'israelRiskProxy', 'corporateCreditSpreads', 'telBondShekeli', 'spread', 'basisPoints', 'yieldCurve', 'signalCoverage', 'confidence', 'duration', 'yieldToMaturity', 'usdIls', 'usNominal10y', 'usReal10y', 'realYieldDifferential'] as const;
+    const terms = ['policyRate', 'inflation', 'cpiIndex', 'inflationExpectations', 'realYield', 'nominalYield', 'realYield10y', 'longYieldTrend', 'israelRiskProxy', 'corporateCreditSpreads', 'telBondShekeli', 'spread', 'basisPoints', 'yieldCurve', 'signalCoverage', 'confidence', 'duration', 'yieldToMaturity', 'usdIls', 'usNominal2y', 'usNominal10y', 'usReal10y', 'usBreakeven10y', 'us2s10s', 'realYieldDifferential'] as const;
     for (const id of terms) {
       const item = CONCEPT_EXPLANATIONS[id];
       expect(item.title.length).toBeGreaterThan(2);
@@ -106,8 +106,10 @@ describe('Phase 1H accessible concept explanations', () => {
     expect(seriesLabel('usd_ils')).toBe('דולר / שקל');
     expect(seriesLabel('us_10y_nominal')).toBe('תשואת אג״ח ארה״ב ל־10 שנים');
     expect(seriesLabel('us_10y_real')).toBe('תשואה ריאלית בארה״ב ל־10 שנים');
+    expect(seriesLabel('us_2y_nominal')).toBe('תשואת אג״ח ארה״ב ל־2 שנים');
+    expect(seriesLabel('us_10y_breakeven')).toBe('ציפיות אינפלציה ל־10 שנים בארה״ב');
     expect(seriesLabel('il_us_real_yield_differential')).toBe('פער תשואה ריאלית ישראל–ארה״ב');
-    expect(html).toContain('תשואות ארה״ב ופער התשואות');
+    expect(html).toContain('שער חליפין ותנאי סיכון מקומיים');
     expect(html).not.toContain('שערי חליפין');
     expect(CONCEPT_EXPLANATIONS.usdIls.what).toBe('כמה שקלים נדרשים כדי לקנות דולר אחד.');
     expect(CONCEPT_EXPLANATIONS.usdIls.why).toBe('שינוי בשקל יכול להשפיע על מחירי יבוא, אינפלציה ותנאי הסיכון המקומיים.');

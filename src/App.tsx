@@ -13,6 +13,7 @@ import { normalizeCreditOutlookContext } from './lib/credit-outlook';
 import { buildHeroEvidence } from './lib/hero-evidence';
 import { getCoreCardSummary } from './lib/card-plain-language';
 import { classifyUsdIlsTrend, usdIlsChartHistory, usdIlsDirection, usdIlsInterpretation, usdIlsIsFresh, usdIlsRange, usdIlsTrendLabel, USDILS_CHART_RANGES, USDILS_RANGE_HIGH_POSITION_MIN, USDILS_RANGE_LOW_POSITION_MAX, USDILS_RANGE_SESSIONS, type UsdIlsTrend } from './lib/usdils';
+import { buildUsTreasuryContext, usTreasuryCurveLabel, usTreasuryTrendLabel, type TreasuryTrend } from './lib/us-treasury-context';
 import CreditPanel from './CreditPanel';
 import ConceptExplainer from './components/ConceptExplainer';
 import { CONCEPT_EXPLANATIONS, type ConceptExplanation, type ConceptId } from './lib/concepts';
@@ -36,8 +37,11 @@ const REGIME_STATUS_HE: Record<SignalStatus, string> = { green: 'חיובי', ye
 export function seriesLabel(key: string): string {
   const labels: Record<string, string> = {
     usd_ils: 'דולר / שקל',
+    us_2y_nominal: 'תשואת אג״ח ארה״ב ל־2 שנים',
     us_10y_nominal: 'תשואת אג״ח ארה״ב ל־10 שנים',
     us_10y_real: 'תשואה ריאלית בארה״ב ל־10 שנים',
+    us_10y_breakeven: 'ציפיות אינפלציה ל־10 שנים בארה״ב',
+    us_2s10s: 'פער תשואה ארה״ב ל־2–10 שנים',
     il_us_real_yield_differential: 'פער תשואה ריאלית ישראל–ארה״ב',
     il_bei_1y: 'ציפיות אינפלציה לשנה',
     il_bei_5y: 'ציפיות אינפלציה לחמש שנים',
@@ -52,14 +56,6 @@ export function seriesLabel(key: string): string {
 
 function marketStatusLabel(status: SourceStatus['status']): string {
   return SOURCE_STATUS[status];
-}
-
-function changeLabel(key: string): string {
-  const labels: Record<string, string> = {
-    '1dPct': 'יום אחד', '5dBp': 'חמישה ימי מסחר', '20dPct': 'עשרים ימי מסחר', '60dPct': 'שישים ימי מסחר',
-    '60dBp': 'שישים ימי מסחר', 'changeBps': 'שינוי', 'previousChange': 'לעומת התצפית הקודמת',
-  };
-  return labels[key] ?? key;
 }
 
 function marketUnitLabel(unit: string): string {
@@ -132,6 +128,69 @@ export function UsdIlsPanel({ series }: { series: OverviewResponse['markets']['u
     })}</div></div>
     {chartData.length > 1 ? <div className="mini-chart usdils-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartData} margin={{ top: 5, right: 8, left: 4, bottom: 0 }}><CartesianGrid stroke="#e8edf2" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} minTickGap={36} /><YAxis orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} width={54} domain={['auto', 'auto']} /><Tooltip formatter={(value: number | string) => [`${numberLabel(Number(value), 4)} ש״ח לדולר`, 'שער']} contentStyle={{ borderRadius: 8, direction: 'rtl', fontFamily: 'inherit' }} /><Line type="monotone" dataKey="rate" name="שער דולר / שקל" stroke="#2779a8" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div> : <p className="usdils-chart-empty">אין מספיק היסטוריה להצגת טווח זה.</p>}
     <small className="usdils-caution">שער הדולר הוא גורם אחד בלבד; אין להסיק ממנו לבדו על האינפלציה, הסיכון או כיוון האג״ח.</small>
+  </section>;
+}
+
+const US_TREASURY_CHART_RANGES = [
+  { id: '1M', sessions: 20 }, { id: '3M', sessions: 60 }, { id: '6M', sessions: 120 }, { id: '1Y', sessions: 240 },
+] as const;
+const US_TREASURY_CHART_SERIES = [
+  { key: 'us10yNominal', label: '10Y נומינלית', concept: 'usNominal10y' },
+  { key: 'us10yReal', label: '10Y ריאלית', concept: 'usReal10y' },
+  { key: 'us10yBreakeven', label: '10Y ציפיות אינפלציה', concept: 'usBreakeven10y' },
+  { key: 'us2yNominal', label: '2Y', concept: 'usNominal2y' },
+] as const;
+
+function usBpsLabel(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'אין תצפית להשוואה';
+  return `${value > 0 ? '+' : ''}${numberLabel(value, 1)} נ״ב`;
+}
+
+function UsTreasuryMetric({ series, title, concept, trend }: { series: OverviewResponse['markets']['us10yNominal']; title: string; concept: ConceptId; trend?: TreasuryTrend }) {
+  return <article className="us-treasury-card">
+    <div className="us-treasury-card-title"><b>{title}</b><ConceptExplainer concept={concept} /></div>
+    <strong>{series.value === null ? 'אין נתון זמין' : `${numberLabel(series.value, 2)}%`}</strong>
+    {trend && <span className={`us-treasury-trend ${trend}`}>{usTreasuryTrendLabel(trend)}</span>}
+    <small>{dateLabel(series.observationDate)} · {marketStatusLabel(series.status)}</small>
+    <div className="us-treasury-changes">{[
+      ['1dBp', 'יום'], ['5dBp', '5 ימים'], ['20dBp', '20 ימים'], ['60dBp', '60 ימים'],
+    ].map(([key, label]) => <span key={key}>{label}: <b>{usBpsLabel(series.changes[key])}</b></span>)}</div>
+    <a href={series.sourceUrl} target="_blank" rel="noreferrer">מקור FRED · {series.source}</a>
+  </article>;
+}
+
+type UsTreasuryMarkets = Pick<OverviewResponse['markets'], 'us2yNominal' | 'us10yNominal' | 'us10yReal' | 'us10yBreakeven' | 'us2s10s'>;
+
+export function UsTreasuryPanel({ markets }: { markets: UsTreasuryMarkets }) {
+  const [selectedKey, setSelectedKey] = useState<(typeof US_TREASURY_CHART_SERIES)[number]['key']>('us10yNominal');
+  const [rangeId, setRangeId] = useState<(typeof US_TREASURY_CHART_RANGES)[number]['id']>('1M');
+  const context = buildUsTreasuryContext({ nominal10y: markets.us10yNominal, real10y: markets.us10yReal, breakeven10y: markets.us10yBreakeven, curve2s10s: markets.us2s10s });
+  const chartSeries = US_TREASURY_CHART_SERIES.find((item) => item.key === selectedKey)!;
+  const sourceSeries = markets[chartSeries.key];
+  const range = US_TREASURY_CHART_RANGES.find((item) => item.id === rangeId)!;
+  const chartRows = sourceSeries.history.length > range.sessions
+    ? sourceSeries.history.slice(-(range.sessions + 1)).map((point) => ({ date: point.observationDate.slice(0, 10), value: point.value }))
+    : [];
+  const curveShape = context.curveShape;
+  const curveValue = markets.us2s10s.value;
+  const curveLabel = usTreasuryCurveLabel(curveShape);
+  const spread = curveValue === null ? 'אין נתון זמין' : `${curveValue > 0 ? '+' : ''}${numberLabel(curveValue, 1)} נ״ב`;
+
+  return <section className="panel us-treasury-panel" aria-labelledby="us-treasury-title">
+    <div className="panel-title"><div><span className="eyebrow">נתוני שוק רשמיים · FRED</span><h2 id="us-treasury-title">אג״ח ממשלת ארה״ב</h2><p>תשואות, אינפלציה צפויה ועקום הריבית בארה״ב</p></div></div>
+    <div className="us-treasury-grid">
+      <UsTreasuryMetric series={markets.us10yNominal} title="תשואה ל־10 שנים" concept="usNominal10y" trend={context.nominal10yTrend} />
+      <UsTreasuryMetric series={markets.us10yReal} title="תשואה ריאלית ל־10 שנים" concept="usReal10y" trend={context.real10yTrend} />
+      <UsTreasuryMetric series={markets.us10yBreakeven} title="ציפיות אינפלציה ל־10 שנים" concept="usBreakeven10y" />
+      <article className="us-treasury-card us-curve-card"><div className="us-treasury-card-title"><b>פער 2–10 שנים</b><ConceptExplainer concept="us2s10s" /></div><strong>{spread}</strong><span className={`us-treasury-trend ${curveShape}`}>{curveLabel}</span><small>{dateLabel(markets.us2s10s.observationDate)} · {marketStatusLabel(markets.us2s10s.status)}</small><p>פער בין תשואת 10 שנים לתשואת 2 שנים.</p><small>שינויים: יום {usBpsLabel(markets.us2s10s.changes['1dBp'])} · 5 ימים {usBpsLabel(markets.us2s10s.changes['5dBp'])} · 20 ימים {usBpsLabel(markets.us2s10s.changes['20dBp'])} · 60 ימים {usBpsLabel(markets.us2s10s.changes['60dBp'])}</small></article>
+    </div>
+    <div className="us-curve-snapshot" aria-label="עקום 2–10 שנים"><b>עקום 2–10 שנים</b><span>2Y: {markets.us2yNominal.value === null ? 'אין נתון זמין' : `${numberLabel(markets.us2yNominal.value, 2)}%`} · {dateLabel(markets.us2yNominal.observationDate)} · {marketStatusLabel(markets.us2yNominal.status)}</span><span>10Y: {markets.us10yNominal.value === null ? 'אין נתון זמין' : `${numberLabel(markets.us10yNominal.value, 2)}%`}</span><span>2s10s: {spread} · {curveLabel}</span></div>
+    <div className={`us-treasury-conclusion ${context.overallLabel === 'תומך באג״ח' ? 'supportive' : context.overallLabel === 'לוחץ על אג״ח' ? 'pressuring' : ''}`}><div><b>מה זה אומר כרגע?</b><strong>{context.overallLabel}</strong></div><p>{context.explanation}</p></div>
+    <div className="us-israel-link"><b>למה זה חשוב לישראל?</b><p>ארה״ב היא שוק אג״ח מרכזי בעולם. עלייה חדה בתשואות שם עשויה להעלות את התשואה שמשקיעים דורשים גם בישראל, וירידה עשויה להפחית חלק מהלחץ. ההשפעה אינה אוטומטית ותלויה גם באינפלציה, בריבית ובסיכון המקומי.</p></div>
+    <div className="us-bps-note">1 נ״ב = 0.01 נקודת אחוז. שינויים מחושבים לפי תאריכי התצפיות בפועל, ללא השלמת ימים חסרים.</div>
+    <div className="us-chart-toolbar"><b>היסטוריית תשואות</b><div className="us-chart-series" aria-label="סדרה לגרף">{US_TREASURY_CHART_SERIES.map((item) => { const available = markets[item.key].history.length > 1; return <button type="button" key={item.key} disabled={!available} aria-pressed={selectedKey === item.key} onClick={() => setSelectedKey(item.key)}>{item.label}</button>; })}</div></div>
+    <div className="us-chart-ranges" aria-label="טווח הגרף">{US_TREASURY_CHART_RANGES.map((item) => sourceSeries.history.length > item.sessions && <button type="button" key={item.id} aria-pressed={rangeId === item.id} onClick={() => setRangeId(item.id)}>{item.id}</button>)}</div>
+    {chartRows.length > 1 ? <div className="mini-chart us-treasury-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartRows} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}><CartesianGrid stroke="#e8edf2" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} minTickGap={36} /><YAxis orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#8290a0', fontSize: 10 }} width={48} domain={['auto', 'auto']} unit="%" /><Tooltip formatter={(value: number | string) => [`${numberLabel(Number(value), 3)}%`, chartSeries.label]} contentStyle={{ borderRadius: 8, direction: 'rtl', fontFamily: 'inherit' }} /><Line type="monotone" dataKey="value" name={chartSeries.label} stroke="#327da4" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div> : <p className="usdils-chart-empty">אין מספיק היסטוריה להצגת טווח זה.</p>}
   </section>;
 }
 
@@ -521,7 +580,7 @@ function App() {
   const outlook = useMemo(() => data ? buildOutlookSummary({ regime: data.regime, signals: data.signals, creditContext }) : null, [data, creditContext]);
   const inflationCard = data?.cards.find((card) => card.key === 'cpi_inflation');
   const inflationStateLabel = !inflationCard || inflationCard.value === null || inflationCard.status === 'unknown' ? 'אין נתון עדכני' : inflationCard.status === 'green' ? 'תומכת יחסית' : inflationCard.status === 'red' ? 'מכבידה' : 'ניטרלית / מעורבת';
-  const heroEvidence = buildHeroEvidence({ signals: data?.signals ?? [], cards: data?.cards ?? [], creditStatus: creditLoading ? null : outlook?.creditStatus ?? null, usdIls: data?.markets.usdIls });
+  const heroEvidence = buildHeroEvidence({ signals: data?.signals ?? [], cards: data?.cards ?? [], creditStatus: creditLoading ? null : outlook?.creditStatus ?? null, usdIls: data?.markets.usdIls, usNominal10y: data?.markets.us10yNominal });
 
 
   return <main className="app-shell">
@@ -566,13 +625,11 @@ function App() {
       <InflationPanel data={data?.inflation ?? { latestIndex: null, mom: null, yoy: null, previousYoy: null, observationDate: null, targetLow: 1, targetHigh: 3, observations: [] }} />
 
       <section className="panel global-markets-panel">
-        <div className="panel-title"><div><span className="eyebrow">הקשר שוק בינלאומי</span><h2>תשואות ארה״ב ופער התשואות</h2><p>נתוני תשואה אמריקאיים ופער התשואות הריאליות.</p></div></div>
+        <div className="panel-title"><div><span className="eyebrow">שער חליפין ותנאי סיכון מקומיים</span><h2>דולר / שקל</h2><p>שער החליפין היציג של בנק ישראל הוא אינדיקטיבי.</p></div></div>
         {data && <UsdIlsPanel series={data.markets.usdIls} />}
-        <div className="inflation-stats">{data && [data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)} <ConceptExplainer concept={series.key === 'us_10y_nominal' ? 'usNominal10y' : series.key === 'us_10y_real' ? 'usReal10y' : 'realYieldDifferential'} /></span><b>{numberLabel(series.value)} {marketUnitLabel(series.unit)}</b><small>{series.observationDate ?? 'ממתין לתצפית'} · {series.source}</small></div>)}</div>
-        <p>שער החליפין היציג של בנק ישראל הוא אינדיקטיבי. פער התשואות הריאליות משווה בין תשואות ואינו נתון CDS.</p>
-        <div className="inflation-stats">{data && [data.markets.usdIls, data.markets.us10yNominal, data.markets.us10yReal, data.markets.realYieldDifferential].map((series) => <div className="inflation-stat" key={`${series.key}-changes`}><span>שינויים זמינים · {seriesLabel(series.key)}</span>{Object.entries(series.changes).map(([key, value]) => <small key={key}>{changeLabel(key)}: {value === null ? 'אין תצפית להשוואה' : `${numberLabel(value, 2)} ${marketUnitLabel(series.unit)}`}</small>)}<small>מקור: <a href={series.sourceUrl} target="_blank" rel="noreferrer">{series.source}</a> · מצב: {marketStatusLabel(series.status)}</small></div>)}</div>
         <p>{data?.markets.riskProxy.label}: {data?.markets.riskProxy.components.map((component) => `${seriesLabel(component.key)} ${component.value === null ? 'אין נתון' : numberLabel(component.value, 2)} ${marketUnitLabel(component.unit)} (${REGIME_STATUS_HE[component.status]}, ${component.sourceObservationDate ?? 'ללא תאריך'})`).join(' · ')}</p>
       </section>
+      {data && <UsTreasuryPanel markets={data.markets} />}
       <section className="panel"><div className="panel-title"><div><span className="eyebrow">פרסום בנק ישראל</span><h2>ציפיות אינפלציה <ConceptExplainer concept="inflationExpectations" /></h2></div><span>{dateLabel(data?.expectations.publicationDate)}</span></div><div className="inflation-stats">{data?.expectations.items.map((series) => <div className="inflation-stat" key={series.key}><span>{seriesLabel(series.key)}</span><b>{series.value === null ? 'אין עדיין תצפית' : `${numberLabel(series.value)}%`}</b><small>{dateLabel(series.observationDate)} · {series.source}</small><small>מצב מקור: {marketStatusLabel(series.status)}</small></div>)}</div></section>
       <CreditPanel summary={creditSummary} summaryLoading={creditLoading} />
       {data && <BondScreener data={data.bondScreener} governmentCurves={data.curves} />}

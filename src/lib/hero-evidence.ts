@@ -1,5 +1,6 @@
 import type { MacroCard, MarketSeries, Signal, SignalStatus } from '../../shared/types';
 import { usdIlsHeroMove } from './usdils';
+import { usTreasuryHeroMove } from './us-treasury-context';
 
 export interface HeroEvidence {
   helps: string[];
@@ -11,6 +12,7 @@ type HeroEvidenceInput = {
   cards: Pick<MacroCard, 'key' | 'status' | 'value'>[];
   creditStatus: 'תומך' | 'מעורב' | 'זהיר' | 'לא זמין' | null;
   usdIls?: MarketSeries;
+  usNominal10y?: MarketSeries;
 };
 
 const percent = (value: number | null | undefined): string | null => value == null || !Number.isFinite(value)
@@ -21,7 +23,7 @@ function stateOf(signals: HeroEvidenceInput['signals'], key: string): SignalStat
   return signals.find((signal) => signal.key === key)?.status ?? 'unknown';
 }
 
-export function buildHeroEvidence({ signals, cards, creditStatus, usdIls }: HeroEvidenceInput): HeroEvidence {
+export function buildHeroEvidence({ signals, cards, creditStatus, usdIls, usNominal10y }: HeroEvidenceInput): HeroEvidence {
   const helps: string[] = [];
   const pressures: string[] = [];
   const inflation = cards.find((card) => card.key === 'cpi_inflation');
@@ -63,6 +65,15 @@ export function buildHeroEvidence({ signals, cards, creditStatus, usdIls }: Hero
     const move = `ב־20 ימי מסחר הדולר ${fxMove.direction === 'weakening' ? 'עלה' : 'ירד'} ${percent(Math.abs(fxMove.changePct))}; השקל ${fxMove.direction === 'weakening' ? 'נחלש' : 'התחזק'}, מה שעשוי להשפיע על מחירי היבוא.`;
     if (fxMove.direction === 'weakening' && pressures.length < 3) pressures.push(move);
     else if (fxMove.direction === 'strengthening' && helps.length < 3) helps.push(move);
+  }
+
+  const usMove = usNominal10y ? usTreasuryHeroMove(usNominal10y) : null;
+  if (usMove && (helps.length < 3 || pressures.length < 3)) {
+    const bullet = usMove.direction === 'falling'
+      ? 'תשואות ארה״ב ירדו ב־20 ימי מסחר; אם המגמה תימשך, היא עשויה להפחית לחץ על אג״ח ארוכות.'
+      : 'תשואות ארה״ב עלו ב־20 ימי מסחר; הדבר עלול להכביד על אג״ח ארוכות גם בישראל.';
+    if (usMove.direction === 'falling' && helps.length < 3) helps.push(bullet);
+    else if (usMove.direction === 'rising' && pressures.length < 3) pressures.push(bullet);
   }
 
   const risk = stateOf(signals, 'israel_risk_proxy');

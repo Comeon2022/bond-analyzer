@@ -134,7 +134,9 @@ export async function parseBoiExchangeHistory(csv: string, sourceTimestamp: stri
   return result.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function parseFredSeries(csv: string, seriesId: 'DGS10' | 'DFII10', sourceTimestamp: string | null = null): Promise<SourceValue[]> {
+export type FredSeriesId = 'DGS2' | 'DGS10' | 'DFII10' | 'T10YIE';
+
+export async function parseFredSeries(csv: string, seriesId: FredSeriesId, sourceTimestamp: string | null = null): Promise<SourceValue[]> {
   const rows = rowsFromCsv(csv);
   const headers = rows[0] ?? [];
   const dateIndex = headers.indexOf('observation_date');
